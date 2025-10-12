@@ -1,0 +1,8 @@
+google-genai
+polars
+Pillow
+PyMuPDF
+matplotlib
+ratelimit
+streamlit
+streamlit-option-menu
