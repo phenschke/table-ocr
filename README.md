@@ -18,9 +18,9 @@ Digitize table scans using the Gemini API.
    pip install uv
    ```
 
-2. **Get a Gemini API Key**: https://ai.google.dev/gemini-api/docs/api-key
+2. **Get a Gemini API Key**: https://aistudio.google.com/app/api-keys
     - If you stay within [these limits](https://ai.google.dev/gemini-api/docs/rate-limits#current-rate-limits), API usage is free.
-    - To go above these limits, you need to [set up billing in Google Cloud](https://ai.google.dev/gemini-api/docs/billing)
+    - To go above these limits, you need to [set up billing in Google Cloud](https://ai.google.dev/gemini-api/docs/billing) (~300$ free credits after initial setup)
 
 ### Setup & Run (from the project root folder)
 
@@ -44,7 +44,7 @@ streamlit run ui/app.py
 
 Once running at http://localhost:8501:
 
-1. **Create a Prompt** - Instructions for the AI
+1. **Create a Prompt** - Instructions and guidance for the LLM
 2. **Create a Schema** - Define the output columns
 3. **Create a Project** - Combine prompt + schema
 4. **Upload PDFs** - Add your documents to the project. All files in a project will use the same prompt/schema
@@ -90,6 +90,12 @@ job_name = create_batch_ocr_job(
 )
 ```
 
+## Notes
+
+- Problems can arise when there are remains of the previous/next page on the left/right edge of scanned images. You can try to solve this via prompting, changing the `IMAGE_PROCESSING_CONFIG` in `config.py` to automatically crop sides, or manually cropping.
+- The UI stores data in the `ocr_data/` directory at the repository root (created automatically)
+
+
 ## Troubleshooting
 
 ### "streamlit: command not found"
@@ -111,25 +117,3 @@ Set your API key:
 export GEMINI_API_KEY='your-key'  # Linux/macOS
 set GEMINI_API_KEY=your-key       # Windows
 ```
-
-## Project Structure
-
-```
-table_ocr/
-├── table_ocr/          # Core OCR library
-│   ├── core.py         # Gemini client, image processing
-│   ├── direct.py       # Direct OCR API
-│   ├── batch.py        # Batch processing API
-│   └── ...
-├── ui/                 # Streamlit UI application
-│   ├── app.py          # Main UI (run this!)
-│   ├── models.py       # UI data models
-│   └── ...
-├── requirements.txt    # Python dependencies
-└── README.md          # This file
-```
-
-## Notes
-
-- Problems can arise when there are remains of the previous/next page on the left/right edge of scanned images. You can try to solve this via prompting, changing the `IMAGE_PROCESSING_CONFIG` in `config.py`, or manually cropping.
-- The UI stores data in the `ocr_data/` directory at the repository root (created automatically)
