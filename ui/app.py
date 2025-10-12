@@ -669,16 +669,6 @@ elif page == "Schemas":
         if 'schema_fields' not in st.session_state:
             st.session_state.schema_fields = []
         
-        # Add field button
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            if st.button(":material/add: Add Field"):
-                st.session_state.schema_fields.append({
-                    "name": "",
-                    "type": "STRING",
-                    "required": False
-                })
-        
         # Display fields
         fields_to_create = []
         for i, field_data in enumerate(st.session_state.schema_fields):
@@ -722,6 +712,17 @@ elif page == "Schemas":
                     field_type=field_type,
                     required=field_required
                 ))
+        
+        # Add field button (below the list of fields)
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            if st.button(":material/add: Add Field"):
+                st.session_state.schema_fields.append({
+                    "name": "",
+                    "type": "STRING",
+                    "required": False
+                })
+                st.rerun()
         
         if st.button("Create Schema"):
             if new_schema_name and fields_to_create:
