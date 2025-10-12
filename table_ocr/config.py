@@ -6,9 +6,9 @@ from google.genai import types
 
 # --- Model and Generation Settings ---
 MODEL_CONFIG = {
-    "default_model": "gemini-2.5-flash-lite",
+    "default_model": "gemini-flash-lite-latest",
     "generation_config": {
-        "temperature": 0.6,
+        "temperature": 0.1,
         "max_output_tokens": 8192,
     },
     "thinking_budget": 0,

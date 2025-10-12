@@ -91,7 +91,7 @@ job_name = create_batch_ocr_job(
 ```
 
 ## Notes
-
+- The default model is Gemini-2.5-Flash-Lite. You can change the used model in config.py
 - Problems can arise when there are remains of the previous/next page on the left/right edge of scanned images. You can try to solve this via prompting, changing the `IMAGE_PROCESSING_CONFIG` in `config.py` to automatically crop sides, or manually cropping.
 - The UI stores data in the `ocr_data/` directory at the repository root (created automatically)
 
@@ -117,3 +117,11 @@ Set your API key:
 export GEMINI_API_KEY='your-key'  # Linux/macOS
 set GEMINI_API_KEY=your-key       # Windows
 ```
+
+## Future Improvements:
+- Enable exporting result data of whole project
+- Majority voting functionality
+- Set processing config via UI
+- Allow changing promt in a project
+- Enable non-tabular structured data extraction?
+- Make OCR model interchangeable (e.g., Marker, LiteLLM)
