@@ -405,11 +405,11 @@ if page == "Projects":
                                 status_badge = "⏸️"
                                 status_color = "orange"
                             
-                            col_name, col_buttons = st.columns([3, 2])
+                            col_name, col_buttons = st.columns([3, 3])
                             with col_name:
                                 st.markdown(f":material/description: **{file_name}** :{status_color}[{status_badge}]")
                             with col_buttons:
-                                btn_col1, btn_col2, btn_col3 = st.columns(3)
+                                btn_col1, btn_col2, btn_col3, btn_col4 = st.columns([2, 2, 1, 1])
                                 with btn_col1:
                                     # Change button text based on processing mode
                                     if processing_mode == "Direct Processing":
@@ -481,20 +481,6 @@ if page == "Projects":
                                                     # Show success message with file path
                                                     st.success(f":material/check_circle: Processed {len(results)} pages!")
                                                     st.info(f":material/folder_open: Results saved to: `{output_path}`")
-                                                    
-                                                    # Display results
-                                                    with st.expander("View Results"):
-                                                        st.json(results)
-                                                    
-                                                    # Offer download button
-                                                    with open(output_path, 'r') as f:
-                                                        st.download_button(
-                                                            label=":material/download: Download Results",
-                                                            data=f.read(),
-                                                            file_name=output_filename,
-                                                            mime="application/json",
-                                                            key=f"download_{project.name}_{file_name}"
-                                                        )
                                                         
                                                 except Exception as e:
                                                     progress_bar.empty()
@@ -523,7 +509,7 @@ if page == "Projects":
                                                     st.code(traceback.format_exc())
                             
                                 with btn_col2:
-                                    if st.button(":material/list_alt: Details", key=f"details_{project.name}_{idx}", disabled=not has_results,
+                                    if st.button(":material/list_alt: View", key=f"details_{project.name}_{idx}", disabled=not has_results,
                                                use_container_width=True):
                                         st.session_state.viewing_file = pdf_path
                                         st.session_state.viewing_project = project.name
@@ -531,7 +517,59 @@ if page == "Projects":
                                         st.rerun()
                                 
                                 with btn_col3:
-                                    if st.button(":material/delete: Remove", key=f"remove_{project.name}_{idx}", 
+                                    # Download button - only show if results exist
+                                    if has_results and result_files:
+                                        # Get most recent result file
+                                        latest_result = result_files[0]
+                                        
+                                        # Check if CSV is available (schema is DataFrame serializable)
+                                        project = store.get_project(project.name)
+                                        schema = store.get_schema(project.schema_name) if project else None
+                                        can_export_csv = schema and schema.is_dataframe_serializable()
+                                        
+                                        # Create popover for download options
+                                        with st.popover(":material/download:", use_container_width=True):
+                                            st.markdown("**Download as:**")
+                                            
+                                            # JSON download
+                                            with open(latest_result, 'r') as f:
+                                                result_content = f.read()
+                                            st.download_button(
+                                                label=":material/code: JSON",
+                                                data=result_content,
+                                                file_name=latest_result.name,
+                                                mime="application/json",
+                                                key=f"download_json_{project.name}_{idx}",
+                                                use_container_width=True
+                                            )
+                                            
+                                            # CSV download (if available)
+                                            if can_export_csv:
+                                                try:
+                                                    df = load_results_as_dataframe(str(latest_result))
+                                                    if df is not None and len(df) > 0:
+                                                        csv_data = df.write_csv()
+                                                        csv_filename = f"{Path(latest_result).stem}.csv"
+                                                        st.download_button(
+                                                            label=":material/table_chart: CSV",
+                                                            data=csv_data,
+                                                            file_name=csv_filename,
+                                                            mime="text/csv",
+                                                            key=f"download_csv_{project.name}_{idx}",
+                                                            use_container_width=True
+                                                        )
+                                                    else:
+                                                        st.caption("CSV: No data available")
+                                                except Exception as e:
+                                                    st.caption(f"CSV: Error - {str(e)[:30]}")
+                                            else:
+                                                st.caption("CSV: Not available for this schema")
+                                    else:
+                                        # Placeholder to maintain alignment
+                                        st.button(":material/download:", key=f"download_disabled_{project.name}_{idx}", disabled=True, use_container_width=True)
+                                
+                                with btn_col4:
+                                    if st.button(":material/delete:", key=f"remove_{project.name}_{idx}", 
                                                use_container_width=True):
                                         # Remove file from project
                                         project.pdf_files.remove(pdf_path)
