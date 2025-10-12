@@ -12,15 +12,17 @@ Digitize table scans using the Gemini API.
    curl -LsSf https://astral.sh/uv/install.sh | sh
    
    # Windows PowerShell
-   powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+   powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
    
    # Or with pip
    pip install uv
    ```
 
 2. **Get a Gemini API Key**: https://ai.google.dev/gemini-api/docs/api-key
+    - If you stay within [these limits](https://ai.google.dev/gemini-api/docs/rate-limits#current-rate-limits), API usage is free.
+    - To go above these limits, you need to [set up billing in Google Cloud](https://ai.google.dev/gemini-api/docs/billing)
 
-### Setup & Run (4 Steps)
+### Setup & Run (from the project root folder)
 
 ```bash
 # 1. Create virtual environment
@@ -38,21 +40,19 @@ export GEMINI_API_KEY='your-key'     # Linux/macOS (or set GEMINI_API_KEY=... on
 streamlit run ui/app.py
 ```
 
-**✅ Works on Linux, macOS, and Windows**
-
 ### Using the UI
 
 Once running at http://localhost:8501:
 
 1. **Create a Prompt** - Instructions for the AI
-2. **Create a Schema** - Define what data to extract
+2. **Create a Schema** - Define the output columns
 3. **Create a Project** - Combine prompt + schema
-4. **Upload PDFs** - Add your documents
-5. **Process** - Extract data from tables
+4. **Upload PDFs** - Add your documents to the project. All files in a project will use the same prompt/schema
+5. **Process** - Extract data from tables. Press "Details" button of a file to inspect the data extracted from individual files.
 
-### Programmatic Usage (Advanced)
+### Programmatic Usage
 
-For developers who want to use the OCR library directly in their code:
+If you want to use the functionalities directly in your code instead of the UI:
 
 ```python
 from table_ocr import ocr_pdf, create_batch_ocr_job
@@ -131,6 +131,5 @@ table_ocr/
 
 ## Notes
 
-- Problems can arise when there are remains of the previous/next page on the left/right edge of scanned images
-- Use the `crop_sides` parameter in `ocr_pdf()` to handle edge artifacts
-- The UI stores data in `ocr_data/` directory (created automatically)
+- Problems can arise when there are remains of the previous/next page on the left/right edge of scanned images. You can try to solve this via prompting, changing the `IMAGE_PROCESSING_CONFIG` in `config.py`, or manually cropping.
+- The UI stores data in the `ocr_data/` directory at the repository root (created automatically)
