@@ -1,6 +1,6 @@
 """
 Streamlit UI for Table OCR project management.
-Fully vibe-coded ugly monolith -- don't judge.
+Fully vibe-coded ugly UI monolith -- don't judge.
 """
 import streamlit as st
 from streamlit_option_menu import option_menu
