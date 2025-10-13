@@ -48,7 +48,7 @@ Once running at http://localhost:8501:
 2. **Create a Schema** - Define the output columns
 3. **Create a Project** - Combine prompt + schema
 4. **Upload PDFs** - Add your documents to the project. All files in a project will use the same prompt/schema
-5. **Process** - Extract data from tables. Press "Details" button of a file to inspect the data extracted from individual files.
+5. **Process** - Extract data from tables. Press "View" button of a file to inspect the data extracted from individual files.
 
 ### Programmatic Usage
 
