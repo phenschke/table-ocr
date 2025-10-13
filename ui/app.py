@@ -1,6 +1,6 @@
 """
 Streamlit UI for Table OCR project management.
-Fully vibe-coded -- don't judge.
+Fully vibe-coded ugly monolith -- don't judge.
 """
 import streamlit as st
 from streamlit_option_menu import option_menu
@@ -8,6 +8,7 @@ import sys
 import json
 from datetime import datetime
 from pathlib import Path
+import polars as pl
 
 # Add parent directory to path to find table_ocr package
 parent_dir = Path(__file__).parent.parent.absolute()
@@ -21,7 +22,7 @@ from table_ocr.batch import create_batch_ocr_job, get_job_state, download_batch_
 # Import from ui package
 from ui.storage import DataStore
 from ui.models import Project, Prompt, OutputSchema, SchemaField, BatchJob
-from ui.dataframe_utils import load_results_as_dataframe, load_page_as_dataframe
+from ui.dataframe_utils import load_results_as_dataframe, load_page_as_dataframe, combine_multiple_results
 
 # Initialize data store
 store = DataStore()
@@ -48,6 +49,23 @@ st.markdown("""
     /* Bootstrap icon styling */
     .bi {
         margin-right: 0.3em;
+    }
+    /* Better back button styling */
+    .back-button-container {
+        margin-bottom: 1.5rem;
+    }
+    .back-button-container button {
+        background-color: transparent;
+        border: 1px solid rgba(250, 250, 250, 0.2);
+        color: rgba(250, 250, 250, 0.8);
+        padding: 0.5rem 1rem;
+        border-radius: 0.5rem;
+        transition: all 0.2s ease;
+    }
+    .back-button-container button:hover {
+        background-color: rgba(250, 250, 250, 0.1);
+        border-color: rgba(250, 250, 250, 0.4);
+        color: rgba(250, 250, 250, 1);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -202,85 +220,62 @@ def get_job_status_badge(status: str) -> tuple:
     return status_map.get(status, ("❓", "gray", status))
 
 # Sidebar navigation with option menu
-# Only show main pages in navigation - File Details is accessed via Details button
+# File Details page can be accessed via Details button, but navbar still works
 with st.sidebar:
+    
+    # Determine default index based on current page
+    default_index = 0
+    if st.session_state.page in ["Projects", "Prompts", "Schemas"]:
+        default_index = ["Projects", "Prompts", "Schemas"].index(st.session_state.page)
+    
+    # Show navigation menu (always active)
+    page = option_menu(
+        menu_title=None,
+        options=["Projects", "Prompts", "Schemas"],
+        icons=["folder", "chat-text", "table"],
+        menu_icon="grid-3x3-gap-fill",
+        default_index=default_index,
+        key="nav_menu",
+        styles={
+            "container": {"padding": "5px", "background-color": "#0e1117"},
+            "icon": {"color": "#83c5be", "font-size": "18px"}, 
+            "nav-link": {
+                "font-size": "15px", 
+                "text-align": "left", 
+                "margin": "2px 0px",
+                "padding": "10px 15px",
+                "border-radius": "5px",
+                "transition": "all 0.2s ease"
+            },
+            "nav-link-selected": {
+                "background-color": "#1f2937",
+                "color": "#fafafa",
+                "font-weight": "500",
+                "box-shadow": "0 1px 3px rgba(0,0,0,0.3)"
+            },
+            "nav-link:hover": {
+                "background-color": "#262730"
+            },
+            "menu-title": {
+                "font-size": "18px",
+                "font-weight": "600",
+                "color": "#fafafa",
+                "padding": "10px 15px 15px 15px"
+            }
+        }
+    )
+    
+    # Keep showing File Details if we're on that page
     if st.session_state.page == "File Details":
-        # If we're on File Details page, show navigation but don't let it change the page
-        option_menu(
-            menu_title=None,
-            options=["Projects", "Prompts", "Schemas"],
-            icons=["folder", "chat-text", "table"],
-            menu_icon="grid-3x3-gap-fill",
-            default_index=0,
-            key="nav_menu_disabled",
-            styles={
-                "container": {"padding": "5px", "background-color": "#0e1117"},
-                "icon": {"color": "#808495", "font-size": "18px"}, 
-                "nav-link": {
-                    "font-size": "15px", 
-                    "text-align": "left", 
-                    "margin": "2px 0px",
-                    "padding": "10px 15px",
-                    "border-radius": "5px",
-                    "color": "#808495"
-                },
-                "nav-link-selected": {
-                    "background-color": "#1f2937",
-                    "color": "#fafafa",
-                    "font-weight": "500"
-                },
-                "menu-title": {
-                    "font-size": "18px",
-                    "font-weight": "600",
-                    "color": "#fafafa",
-                    "padding": "10px 15px 15px 15px"
-                }
-            }
-        )
-        st.info(":material/info: Use the Back button to return to Projects")
-        page = "File Details"  # Keep showing File Details page
+        page = "File Details"
     else:
-        # Normal navigation for main pages
-        default_index = 0
-        if st.session_state.page in ["Projects", "Prompts", "Schemas"]:
-            default_index = ["Projects", "Prompts", "Schemas"].index(st.session_state.page)
-        
-        page = option_menu(
-            menu_title=None,
-            options=["Projects", "Prompts", "Schemas"],
-            icons=["folder", "chat-text", "table"],
-            menu_icon="grid-3x3-gap-fill",
-            default_index=default_index,
-            key="nav_menu",
-            styles={
-                "container": {"padding": "5px", "background-color": "#0e1117"},
-                "icon": {"color": "#83c5be", "font-size": "18px"}, 
-                "nav-link": {
-                    "font-size": "15px", 
-                    "text-align": "left", 
-                    "margin": "2px 0px",
-                    "padding": "10px 15px",
-                    "border-radius": "5px",
-                    "transition": "all 0.2s ease"
-                },
-                "nav-link-selected": {
-                    "background-color": "#1f2937",
-                    "color": "#fafafa",
-                    "font-weight": "500",
-                    "box-shadow": "0 1px 3px rgba(0,0,0,0.3)"
-                },
-                "nav-link:hover": {
-                    "background-color": "#262730"
-                },
-                "menu-title": {
-                    "font-size": "18px",
-                    "font-weight": "600",
-                    "color": "#fafafa",
-                    "padding": "10px 15px 15px 15px"
-                }
-            }
-        )
+        # Update session state for normal pages
         st.session_state.page = page
+
+# Clear file viewing state when navigating away from File Details
+if page in ["Projects", "Prompts", "Schemas"] and (st.session_state.viewing_file is not None or st.session_state.viewing_project is not None):
+    st.session_state.viewing_file = None
+    st.session_state.viewing_project = None
 
 # Projects Page
 if page == "Projects":
@@ -324,8 +319,10 @@ if page == "Projects":
                 else:
                     st.error("Please enter a project name")
     
+    # Visual separator
+    #st.markdown("---")
+    
     # List existing projects
-    st.subheader("Existing Projects")
     projects = store.get_projects()
     
     if not projects:
@@ -343,17 +340,16 @@ if page == "Projects":
                         st.write(f"**Created:** {project.created_at.strftime('%Y-%m-%d %H:%M')}")
                     
                     # Processing Mode Selector (compact)
-                    st.markdown("**Processing Mode**")
                     processing_mode = st.radio(
-                        "mode",
-                        ["Direct Processing", "Batch Processing"],
-                        key=f"processing_mode_{project.name}",
-                        horizontal=True,
-                        label_visibility="collapsed"
-                    )
+                            "**Processing Mode:**",
+                            ["Direct", "Batch"],
+                            key=f"processing_mode_{project.name}",
+                            horizontal=True,
+                            #label_visibility="collapsed"
+                        )
                     
                     # Display mode descriptions
-                    if processing_mode == "Direct Processing":
+                    if processing_mode == "Direct":
                         st.caption("⚡ **Direct:** Fast synchronous processing with immediate results (full API cost)")
                     else:
                         st.caption("💰 **Batch:** Asynchronous processing with 50% cost savings (~24 hour completion time)")
@@ -385,6 +381,10 @@ if page == "Projects":
                 # List files (compact)
                 if project.pdf_files:
                         st.subheader(f"Files in Project ({len(project.pdf_files)})")
+                        
+                        # Container for active processing jobs
+                        processing_container = st.container()
+                        
                         for idx, pdf_path in enumerate(project.pdf_files):
                             file_name = Path(pdf_path).name
                             
@@ -412,101 +412,18 @@ if page == "Projects":
                                 btn_col1, btn_col2, btn_col3, btn_col4 = st.columns([2, 2, 1, 1])
                                 with btn_col1:
                                     # Change button text based on processing mode
-                                    if processing_mode == "Direct Processing":
+                                    if processing_mode == "Direct":
                                         button_label = ":material/play_circle: Process"
                                     else:
                                         button_label = ":material/inbox: Submit"
                                     
+                                    # Check if currently processing this file
+                                    is_processing = st.session_state.get(f"processing_{project.name}_{idx}", False)
+                                    
                                     if st.button(button_label, key=f"process_{project.name}_{idx}", 
-                                               use_container_width=True):
-                                        # Get prompt and schema
-                                        prompt_obj = store.get_prompt(project.prompt_name)
-                                        schema_obj = store.get_schema(project.schema_name)
-                                        
-                                        if prompt_obj and schema_obj:
-                                            genai_schema = schema_obj.to_genai_schema()
-                                            
-                                            if processing_mode == "Direct Processing":
-                                                # ===== DIRECT PROCESSING =====
-                                                # Create results directory
-                                                results_dir = Path("ocr_data") / "results" / project.name
-                                                results_dir.mkdir(parents=True, exist_ok=True)
-                                                
-                                                # Generate output filename with timestamp
-                                                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                                                pdf_name_stem = Path(pdf_path).stem
-                                                output_filename = f"{pdf_name_stem}_{timestamp}.json"
-                                                output_path = results_dir / output_filename
-                                                
-                                                # Create progress bar and status text
-                                                progress_bar = st.progress(0)
-                                                status_text = st.empty()
-                                                
-                                                try:
-                                                    # Define progress callback
-                                                    def update_progress(current, total):
-                                                        progress = current / total
-                                                        progress_bar.progress(progress)
-                                                        status_text.text(f"Processing page {current} of {total}...")
-                                                    
-                                                    # Process PDF with progress tracking
-                                                    status_text.text("Starting PDF processing...")
-                                                    results = ocr_pdf(
-                                                        pdf_path=pdf_path,
-                                                        prompt_template=prompt_obj.content,
-                                                        response_schema=genai_schema,
-                                                        stream_output=False,
-                                                        progress_callback=update_progress
-                                                    )
-                                                    
-                                                    # Save results to file
-                                                    output_data = {
-                                                        "project": project.name,
-                                                        "pdf_file": file_name,
-                                                        "prompt": prompt_obj.name,
-                                                        "schema": schema_obj.name,
-                                                        "timestamp": timestamp,
-                                                        "processing_mode": "direct",
-                                                        "num_pages": len(results),
-                                                        "results": results
-                                                    }
-                                                    
-                                                    with open(output_path, 'w') as f:
-                                                        json.dump(output_data, f, indent=2)
-                                                    
-                                                    # Clear progress indicators
-                                                    progress_bar.empty()
-                                                    status_text.empty()
-                                                    
-                                                    # Show success message with file path
-                                                    st.success(f":material/check_circle: Processed {len(results)} pages!")
-                                                    st.info(f":material/folder_open: Results saved to: `{output_path}`")
-                                                        
-                                                except Exception as e:
-                                                    progress_bar.empty()
-                                                    status_text.empty()
-                                                    st.error(f"Error processing file: {e}")
-                                            
-                                            else:
-                                                # ===== BATCH PROCESSING =====
-                                                try:
-                                                    with st.spinner("Submitting batch job..."):
-                                                        batch_job = submit_batch_job_ui(
-                                                            project=project,
-                                                            pdf_path=pdf_path,
-                                                            prompt_content=prompt_obj.content,
-                                                            genai_schema=genai_schema
-                                                        )
-                                                    
-                                                    st.success(":material/check_circle: Batch job submitted successfully!")
-                                                    st.info(f":material/inbox: Job Name: `{batch_job.job_name}`")
-                                                    st.info(":material/schedule: Expected completion: ~24 hours")
-                                                    st.info(":material/lightbulb: Check the **Batch Jobs** section below to monitor status")
-                                                    
-                                                except Exception as e:
-                                                    st.error(f"Error submitting batch job: {e}")
-                                                    import traceback
-                                                    st.code(traceback.format_exc())
+                                               use_container_width=True, disabled=is_processing):
+                                        st.session_state[f"processing_{project.name}_{idx}"] = True
+                                        st.rerun()
                             
                                 with btn_col2:
                                     if st.button(":material/list_alt: View", key=f"details_{project.name}_{idx}", disabled=not has_results,
@@ -571,10 +488,164 @@ if page == "Projects":
                                 with btn_col4:
                                     if st.button(":material/delete:", key=f"remove_{project.name}_{idx}", 
                                                use_container_width=True):
-                                        # Remove file from project
-                                        project.pdf_files.remove(pdf_path)
-                                        store.save_project(project)
+                                        # Store file to delete in session state and show confirmation
+                                        st.session_state[f"confirm_remove_{project.name}_{idx}"] = True
                                         st.rerun()
+                                    
+                                    # Confirmation dialog
+                                    if st.session_state.get(f"confirm_remove_{project.name}_{idx}", False):
+                                        @st.dialog("Confirm Removal")
+                                        def confirm_remove_file():
+                                            st.write(f"Are you sure you want to remove **{file_name}** from this project?")
+                                            st.warning("This will remove the file from the project and delete all related OCR results.")
+                                            st.info("The original PDF file will remain in the uploads folder.")
+                                            
+                                            # Show what will be deleted
+                                            if result_files:
+                                                st.caption(f"**{len(result_files)} result file(s) will be deleted:**")
+                                                for rf in result_files[:5]:  # Show first 5
+                                                    st.caption(f"- {rf.name}")
+                                                if len(result_files) > 5:
+                                                    st.caption(f"... and {len(result_files) - 5} more")
+                                            
+                                            col1, col2 = st.columns(2)
+                                            with col1:
+                                                if st.button("Yes, Remove", use_container_width=True, type="primary"):
+                                                    # Remove file from project
+                                                    project.pdf_files.remove(pdf_path)
+                                                    
+                                                    # Delete all result files for this PDF
+                                                    for result_file in result_files:
+                                                        try:
+                                                            result_file.unlink()
+                                                        except Exception as e:
+                                                            st.error(f"Failed to delete {result_file.name}: {e}")
+                                                    
+                                                    # Also remove any related batch jobs
+                                                    project.batch_jobs = [
+                                                        job for job in project.batch_jobs 
+                                                        if job.pdf_file != pdf_path
+                                                    ]
+                                                    
+                                                    store.save_project(project)
+                                                    st.session_state[f"confirm_remove_{project.name}_{idx}"] = False
+                                                    st.rerun()
+                                            with col2:
+                                                if st.button("Cancel", use_container_width=True):
+                                                    st.session_state[f"confirm_remove_{project.name}_{idx}"] = False
+                                                    st.rerun()
+                                        confirm_remove_file()
+                        
+                        # ===== ACTIVE PROCESSING SECTION =====
+                        # Show processing status for any files currently being processed
+                        with processing_container:
+                            for idx, pdf_path in enumerate(project.pdf_files):
+                                if st.session_state.get(f"processing_{project.name}_{idx}", False):
+                                    file_name = Path(pdf_path).name
+                                    
+                                    with st.container(border=True):
+                                        st.markdown(f"### :material/hourglass_top: Processing: {file_name}")
+                                        
+                                        # Get prompt and schema
+                                        prompt_obj = store.get_prompt(project.prompt_name)
+                                        schema_obj = store.get_schema(project.schema_name)
+                                        
+                                        if prompt_obj and schema_obj:
+                                            genai_schema = schema_obj.to_genai_schema()
+                                            
+                                            if processing_mode == "Direct":
+                                                # ===== DIRECT PROCESSING =====
+                                                # Create results directory
+                                                results_dir = Path("ocr_data") / "results" / project.name
+                                                results_dir.mkdir(parents=True, exist_ok=True)
+                                                
+                                                # Generate output filename with timestamp
+                                                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                                pdf_name_stem = Path(pdf_path).stem
+                                                output_filename = f"{pdf_name_stem}_{timestamp}.json"
+                                                output_path = results_dir / output_filename
+                                                
+                                                # Create progress bar and status text
+                                                progress_bar = st.progress(0)
+                                                status_text = st.empty()
+                                                
+                                                try:
+                                                    # Define progress callback
+                                                    def update_progress(current, total):
+                                                        progress = current / total
+                                                        progress_bar.progress(progress)
+                                                        status_text.text(f"Processing page {current} of {total}...")
+                                                    
+                                                    # Process PDF with progress tracking
+                                                    status_text.text("Starting PDF processing...")
+                                                    results = ocr_pdf(
+                                                        pdf_path=pdf_path,
+                                                        prompt_template=prompt_obj.content,
+                                                        response_schema=genai_schema,
+                                                        stream_output=False,
+                                                        progress_callback=update_progress
+                                                    )
+                                                    
+                                                    # Save results to file
+                                                    output_data = {
+                                                        "project": project.name,
+                                                        "pdf_file": file_name,
+                                                        "prompt": prompt_obj.name,
+                                                        "schema": schema_obj.name,
+                                                        "timestamp": timestamp,
+                                                        "processing_mode": "direct",
+                                                        "num_pages": len(results),
+                                                        "results": results
+                                                    }
+                                                    
+                                                    with open(output_path, 'w') as f:
+                                                        json.dump(output_data, f, indent=2)
+                                                    
+                                                    # Clear progress indicators
+                                                    progress_bar.empty()
+                                                    status_text.empty()
+                                                    
+                                                    # Show success message with file path
+                                                    st.success(f":material/check_circle: Processed {len(results)} pages!")
+                                                    st.info(f":material/folder_open: Results saved to: `{output_path}`")
+                                                    
+                                                    # Clear processing state
+                                                    st.session_state[f"processing_{project.name}_{idx}"] = False
+                                                        
+                                                except Exception as e:
+                                                    progress_bar.empty()
+                                                    status_text.empty()
+                                                    st.error(f"Error processing file: {e}")
+                                                    
+                                                    # Clear processing state on error
+                                                    st.session_state[f"processing_{project.name}_{idx}"] = False
+                                            
+                                            else:
+                                                # ===== BATCH PROCESSING =====
+                                                try:
+                                                    with st.spinner("Submitting batch job..."):
+                                                        batch_job = submit_batch_job_ui(
+                                                            project=project,
+                                                            pdf_path=pdf_path,
+                                                            prompt_content=prompt_obj.content,
+                                                            genai_schema=genai_schema
+                                                        )
+                                                    
+                                                    st.success(":material/check_circle: Batch job submitted successfully!")
+                                                    st.info(f":material/inbox: Job Name: `{batch_job.job_name}`")
+                                                    st.info(":material/schedule: Expected completion: ~24 hours")
+                                                    st.info(":material/lightbulb: Check the **Batch Jobs** section below to monitor status")
+                                                    
+                                                    # Clear processing state
+                                                    st.session_state[f"processing_{project.name}_{idx}"] = False
+                                                    
+                                                except Exception as e:
+                                                    st.error(f"Error submitting batch job: {e}")
+                                                    import traceback
+                                                    st.code(traceback.format_exc())
+                                                    
+                                                    # Clear processing state on error
+                                                    st.session_state[f"processing_{project.name}_{idx}"] = False
                 
                 # ===== BATCH JOBS SECTION =====
                 if project.batch_jobs:
@@ -637,15 +708,184 @@ if page == "Projects":
                                 with action_cols[1]:
                                     if st.button(":material/delete: Remove", key=f"rm_{project.name}_{job_idx}", 
                                                use_container_width=True):
-                                        project.batch_jobs.pop(job_idx)
-                                        store.save_project(project)
+                                        st.session_state[f"confirm_rm_{project.name}_{job_idx}"] = True
                                         st.rerun()
+                                    
+                                    # Confirmation dialog
+                                    if st.session_state.get(f"confirm_rm_{project.name}_{job_idx}", False):
+                                        @st.dialog("Confirm Removal")
+                                        def confirm_remove_batch():
+                                            st.write("Are you sure you want to remove this batch job?")
+                                            st.caption(f"Job: {job.job_name}")
+                                            st.warning("This will remove the job from the project list and delete any downloaded result files.")
+                                            
+                                            # Show what will be deleted
+                                            files_to_delete = []
+                                            if job.result_file_path and Path(job.result_file_path).exists():
+                                                files_to_delete.append(Path(job.result_file_path))
+                                            
+                                            # Also check for JSONL files in batch directory
+                                            batch_dir = Path("ocr_data") / "batch" / project.name
+                                            if batch_dir.exists():
+                                                jsonl_files = list(batch_dir.glob(f"*{job.job_name}*.jsonl"))
+                                                files_to_delete.extend(jsonl_files)
+                                            
+                                            if files_to_delete:
+                                                st.caption(f"**{len(files_to_delete)} file(s) will be deleted:**")
+                                                for f in files_to_delete[:5]:
+                                                    st.caption(f"- {f.name}")
+                                                if len(files_to_delete) > 5:
+                                                    st.caption(f"... and {len(files_to_delete) - 5} more")
+                                            
+                                            col1, col2 = st.columns(2)
+                                            with col1:
+                                                if st.button("Yes, Remove", use_container_width=True, type="primary"):
+                                                    # Delete associated files
+                                                    for file_path in files_to_delete:
+                                                        try:
+                                                            file_path.unlink()
+                                                        except Exception as e:
+                                                            st.error(f"Failed to delete {file_path.name}: {e}")
+                                                    
+                                                    # Remove job from project
+                                                    project.batch_jobs.pop(job_idx)
+                                                    store.save_project(project)
+                                                    st.session_state[f"confirm_rm_{project.name}_{job_idx}"] = False
+                                                    st.rerun()
+                                            with col2:
+                                                if st.button("Cancel", use_container_width=True):
+                                                    st.session_state[f"confirm_rm_{project.name}_{job_idx}"] = False
+                                                    st.rerun()
+                                        confirm_remove_batch()
                 
-                # Delete project
-                if st.button(":material/delete_forever: Delete Project", key=f"delete_{project.name}"):
-                        store.delete_project(project.name)
-                        st.success(f"Deleted project '{project.name}'")
+                # Download all and Delete project buttons
+                btn_col1, btn_col2, btn_spacer = st.columns([1, 1, 2])
+                
+                with btn_col1:
+                    # Check if any results exist
+                    results_dir = Path("ocr_data") / "results" / project.name
+                    has_any_results = False
+                    all_result_files = []
+                    if results_dir.exists():
+                        all_result_files = list(results_dir.glob("*.json"))
+                        has_any_results = len(all_result_files) > 0
+                    
+                    # Download all button with popover
+                    if has_any_results:
+                        with st.popover(":material/download: Download All Results", use_container_width=True):
+                            st.markdown("**Download all project results as:**")
+                            
+                            # Get schema to check if DataFrame serializable
+                            schema = store.get_schema(project.schema_name)
+                            can_export_csv = schema and schema.is_dataframe_serializable()
+                            
+                            # Combine all results using utility function
+                            try:
+                                combined_results = combine_multiple_results([str(f) for f in all_result_files])
+                                all_data = combined_results["data"]
+                                
+                                # Show errors if any
+                                if combined_results["errors"]:
+                                    with st.expander("⚠️ Processing Warnings", expanded=False):
+                                        for error in combined_results["errors"]:
+                                            st.warning(error)
+                                
+                                # Create JSON download
+                                combined_json = {
+                                    "project": project.name,
+                                    "timestamp": datetime.now().isoformat(),
+                                    "total_files": combined_results["total_files"],
+                                    "total_rows": combined_results["total_rows"],
+                                    "data": all_data
+                                }
+                                
+                                st.download_button(
+                                    label=":material/code: JSON",
+                                    data=json.dumps(combined_json, indent=2),
+                                    file_name=f"{project.name}_all_results.json",
+                                    mime="application/json",
+                                    key=f"download_all_json_{project.name}",
+                                    use_container_width=True
+                                )
+                                
+                                # CSV download (if schema is DataFrame serializable)
+                                if can_export_csv and all_data:
+                                    df = pl.DataFrame(all_data)
+                                    csv_data = df.write_csv()
+                                    st.download_button(
+                                        label=":material/table_chart: CSV",
+                                        data=csv_data,
+                                        file_name=f"{project.name}_all_results.csv",
+                                        mime="text/csv",
+                                        key=f"download_all_csv_{project.name}",
+                                        use_container_width=True
+                                    )
+                                elif not can_export_csv:
+                                    st.caption("CSV: Not available for this schema")
+                                else:
+                                    st.caption("CSV: No data available")
+                                    
+                            except Exception as e:
+                                st.error(f"Error preparing download: {str(e)[:50]}")
+                    else:
+                        st.button(":material/download: Download All Results", disabled=True, use_container_width=True)
+                
+                with btn_col2:
+                    if st.button(":material/delete_forever: Delete Project", key=f"delete_{project.name}", use_container_width=True):
+                        st.session_state[f"confirm_delete_{project.name}"] = True
                         st.rerun()
+                    
+                    # Confirmation dialog
+                    if st.session_state.get(f"confirm_delete_{project.name}", False):
+                        @st.dialog("Confirm Project Deletion")
+                        def confirm_delete_project():
+                            st.write(f"Are you sure you want to delete project **{project.name}**?")
+                            st.error("⚠️ This action cannot be undone!")
+                            st.warning("This will delete the project configuration, all OCR results, and batch data.")
+                            st.info("Original PDF files in the uploads folder will be preserved.")
+                            
+                            # Count files that will be deleted
+                            files_to_delete_count = 0
+                            results_dir = Path("ocr_data") / "results" / project.name
+                            batch_dir = Path("ocr_data") / "batch" / project.name
+                            
+                            if results_dir.exists():
+                                files_to_delete_count += len(list(results_dir.glob("*.json")))
+                            if batch_dir.exists():
+                                files_to_delete_count += len(list(batch_dir.glob("*.jsonl")))
+                            
+                            if files_to_delete_count > 0:
+                                st.caption(f"**{files_to_delete_count} result/batch file(s) will be deleted**")
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if st.button("Yes, Delete Project", use_container_width=True, type="primary"):
+                                    # Delete result files
+                                    if results_dir.exists():
+                                        import shutil
+                                        try:
+                                            shutil.rmtree(results_dir)
+                                        except Exception as e:
+                                            st.error(f"Failed to delete results directory: {e}")
+                                    
+                                    # Delete batch files
+                                    if batch_dir.exists():
+                                        import shutil
+                                        try:
+                                            shutil.rmtree(batch_dir)
+                                        except Exception as e:
+                                            st.error(f"Failed to delete batch directory: {e}")
+                                    
+                                    # Delete project configuration
+                                    store.delete_project(project.name)
+                                    st.session_state[f"confirm_delete_{project.name}"] = False
+                                    st.success(f"Deleted project '{project.name}'")
+                                    st.rerun()
+                            with col2:
+                                if st.button("Cancel", use_container_width=True):
+                                    st.session_state[f"confirm_delete_{project.name}"] = False
+                                    st.rerun()
+                        confirm_delete_project()
 
 # Prompts Page
 elif page == "Prompts":
@@ -671,7 +911,7 @@ elif page == "Prompts":
                 st.error("Please fill in all fields")
     
     # List existing prompts
-    st.subheader("Existing Prompts")
+    #st.subheader("Existing Prompts")
     prompts = store.get_prompts()
     
     if not prompts:
@@ -689,9 +929,27 @@ elif page == "Prompts":
                 st.write(f"**Created:** {prompt.created_at.strftime('%Y-%m-%d %H:%M')}")
                 
                 if st.button(":material/delete: Delete", key=f"delete_prompt_{prompt.name}"):
-                    store.delete_prompt(prompt.name)
-                    st.success(f"Deleted prompt '{prompt.name}'")
+                    st.session_state[f"confirm_delete_prompt_{prompt.name}"] = True
                     st.rerun()
+                
+                # Confirmation dialog
+                if st.session_state.get(f"confirm_delete_prompt_{prompt.name}", False):
+                    @st.dialog("Confirm Prompt Deletion")
+                    def confirm_delete_prompt():
+                        st.write(f"Are you sure you want to delete prompt **{prompt.name}**?")
+                        st.warning("Projects using this prompt will need to be updated.")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button("Yes, Delete", use_container_width=True, type="primary"):
+                                store.delete_prompt(prompt.name)
+                                st.session_state[f"confirm_delete_prompt_{prompt.name}"] = False
+                                st.success(f"Deleted prompt '{prompt.name}'")
+                                st.rerun()
+                        with col2:
+                            if st.button("Cancel", use_container_width=True):
+                                st.session_state[f"confirm_delete_prompt_{prompt.name}"] = False
+                                st.rerun()
+                    confirm_delete_prompt()
 
 # Schemas Page
 elif page == "Schemas":
@@ -741,8 +999,25 @@ elif page == "Schemas":
             
             with col_d:
                 if st.button(":material/delete:", key=f"remove_field_{i}"):
-                    st.session_state.schema_fields.pop(i)
+                    st.session_state[f"confirm_remove_field_{i}"] = True
                     st.rerun()
+                
+                # Confirmation dialog for field removal
+                if st.session_state.get(f"confirm_remove_field_{i}", False):
+                    @st.dialog("Confirm Field Removal")
+                    def confirm_remove_field():
+                        st.write(f"Remove field **{field_name or '(unnamed)'}**?")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button("Yes, Remove", use_container_width=True, type="primary"):
+                                st.session_state.schema_fields.pop(i)
+                                st.session_state[f"confirm_remove_field_{i}"] = False
+                                st.rerun()
+                        with col2:
+                            if st.button("Cancel", use_container_width=True):
+                                st.session_state[f"confirm_remove_field_{i}"] = False
+                                st.rerun()
+                    confirm_remove_field()
             
             if field_name:
                 fields_to_create.append(SchemaField(
@@ -773,7 +1048,7 @@ elif page == "Schemas":
                 st.error("Please enter a schema name and add at least one field")
     
     # List existing schemas
-    st.subheader("Existing Schemas")
+    #st.subheader("Existing Schemas")
     schemas = store.get_schemas()
     
     if not schemas:
@@ -792,9 +1067,27 @@ elif page == "Schemas":
                         st.write(f"- **{field.name}** ({field.field_type}) {required_mark}")
                 
                 if st.button(":material/delete: Delete", key=f"delete_schema_{schema.name}"):
-                    store.delete_schema(schema.name)
-                    st.success(f"Deleted schema '{schema.name}'")
+                    st.session_state[f"confirm_delete_schema_{schema.name}"] = True
                     st.rerun()
+                
+                # Confirmation dialog
+                if st.session_state.get(f"confirm_delete_schema_{schema.name}", False):
+                    @st.dialog("Confirm Schema Deletion")
+                    def confirm_delete_schema():
+                        st.write(f"Are you sure you want to delete schema **{schema.name}**?")
+                        st.warning("Projects using this schema will need to be updated.")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button("Yes, Delete", use_container_width=True, type="primary"):
+                                store.delete_schema(schema.name)
+                                st.session_state[f"confirm_delete_schema_{schema.name}"] = False
+                                st.success(f"Deleted schema '{schema.name}'")
+                                st.rerun()
+                        with col2:
+                            if st.button("Cancel", use_container_width=True):
+                                st.session_state[f"confirm_delete_schema_{schema.name}"] = False
+                                st.rerun()
+                    confirm_delete_schema()
 
 # File Details Page
 elif page == "File Details":
@@ -808,14 +1101,15 @@ elif page == "File Details":
         project_name = st.session_state.viewing_project
         file_name = Path(pdf_path).name
         
-        # Header with back button
-        col1, col2 = st.columns([1, 5])
-        with col1:
-            if st.button(":material/arrow_back: Back"):
-                st.session_state.page = "Projects"
-                st.rerun()
-        with col2:
-            st.header(f":material/description: File Details: {file_name}")
+        # Back button with better styling
+        st.markdown('<div class="back-button-container">', unsafe_allow_html=True)
+        if st.button(":material/arrow_back: Back", key="back_to_projects"):
+            st.session_state.page = "Projects"
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Header
+        st.header(f":material/description: File Details: {file_name}")
         
         # Check if file exists
         if not Path(pdf_path).exists():
@@ -861,9 +1155,9 @@ elif page == "File Details":
                         if schema:
                             is_dataframe_serializable = schema.is_dataframe_serializable()
                     
-                    # SECTION 1: Full File Data Preview (at the top)
+                    # SECTION 1: File Data Preview (at the top)
                     if is_dataframe_serializable:
-                        st.subheader(":material/analytics: Full File Data Preview")
+                        st.subheader(":material/analytics: File Data Preview")
                         
                         # Load data as DataFrame
                         df = load_results_as_dataframe(str(selected_result_file))
@@ -878,34 +1172,41 @@ elif page == "File Details":
                             with col3:
                                 st.metric("Pages", num_pages)
                             
-                            # Show column info
-                            with st.expander(":material/info: Column Information"):
-                                col_info = []
-                                for col_name in df.columns:
-                                    dtype = str(df[col_name].dtype)
-                                    col_info.append({"Column": col_name, "Type": dtype})
-                                st.table(col_info)
-                            
                             # Display interactive DataFrame
                             st.write("**Data Table:**")
                             st.dataframe(df, use_container_width=True, height=400)
                             
-                            # CSV download button
-                            csv_data = df.write_csv()
-                            st.download_button(
-                                label=":material/download: Download as CSV",
-                                data=csv_data,
-                                file_name=f"{pdf_stem}.csv",
-                                mime="text/csv",
-                                key="download_csv"
-                            )
+                            # Download button with JSON/CSV options
+                            with st.popover(":material/download: Download All Results"):
+                                st.markdown("**Download as:**")
+                                
+                                # JSON download
+                                st.download_button(
+                                    label=":material/code: JSON",
+                                    data=json.dumps(result_data, indent=2),
+                                    file_name=selected_result_file.name,
+                                    mime="application/json",
+                                    key="download_all_json",
+                                    use_container_width=True
+                                )
+                                
+                                # CSV download
+                                csv_data = df.write_csv()
+                                st.download_button(
+                                    label=":material/table_chart: CSV",
+                                    data=csv_data,
+                                    file_name=f"{pdf_stem}.csv",
+                                    mime="text/csv",
+                                    key="download_all_csv",
+                                    use_container_width=True
+                                )
                         else:
                             st.info("No data available for preview.")
                         
                         st.markdown("---")
                     
                     # SECTION 2: Individual Page View
-                    st.subheader(":material/description: Individual Page View")
+                    st.subheader(":material/description: Inspect Pages")
                     
                     # Initialize page number in session state
                     if 'current_page' not in st.session_state:
@@ -978,37 +1279,45 @@ elif page == "File Details":
                                 # Display as formatted JSON (original behavior)
                                 st.json(page_result)
                             
-                            # Download button for this page's results
-                            st.download_button(
-                                label=f":material/download: Download Page {st.session_state.current_page} Results",
-                                data=json.dumps(page_result, indent=2),
-                                file_name=f"{pdf_stem}_page_{st.session_state.current_page}.json",
-                                mime="application/json",
-                                key="download_page_result"
-                            )
+                            # Download button with JSON/CSV options for this page
+                            with st.popover(f":material/download: Download Page {st.session_state.current_page} Results"):
+                                st.markdown("**Download as:**")
+                                
+                                # JSON download
+                                st.download_button(
+                                    label=":material/code: JSON",
+                                    data=json.dumps(page_result, indent=2),
+                                    file_name=f"{pdf_stem}_page_{st.session_state.current_page}.json",
+                                    mime="application/json",
+                                    key="download_page_json",
+                                    use_container_width=True
+                                )
+                                
+                                # CSV download (if DataFrame serializable)
+                                if is_dataframe_serializable:
+                                    page_df = load_page_as_dataframe(
+                                        page_result, 
+                                        st.session_state.current_page,
+                                        file_name
+                                    )
+                                    if page_df is not None and len(page_df) > 0:
+                                        csv_data = page_df.write_csv()
+                                        st.download_button(
+                                            label=":material/table_chart: CSV",
+                                            data=csv_data,
+                                            file_name=f"{pdf_stem}_page_{st.session_state.current_page}.csv",
+                                            mime="text/csv",
+                                            key="download_page_csv",
+                                            use_container_width=True
+                                        )
+                                    else:
+                                        st.caption("CSV: No data available")
+                                else:
+                                    st.caption("CSV: Not available for this schema")
                         else:
                             st.warning(f"No results for page {st.session_state.current_page}")
-                    
-                    # Download all results button
-                    st.markdown("---")
-                    st.download_button(
-                        label=":material/download: Download All Results (JSON)",
-                        data=json.dumps(result_data, indent=2),
-                        file_name=selected_result_file.name,
-                        mime="application/json",
-                        key="download_all_results"
-                    )
                     
                 except Exception as e:
                     st.error(f"Error loading results: {e}")
                     import traceback
                     st.code(traceback.format_exc())
-
-
-# Footer
-st.sidebar.markdown("---")
-st.sidebar.info("""
-**Table OCR Manager**
-
-Manage OCR projects with custom prompts and output schemas.
-""")
