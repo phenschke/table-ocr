@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 from . import config as app_config
 from .core import GeminiClient, pdf_pages_to_images, logger
+from .parser import strip_json_codeblock
 
 @dataclass
 class BatchOCRResult:
@@ -308,15 +309,17 @@ def parse_pdf_batch_results_file(file_path: str) -> BatchOCRResult:
         llm_output = line['response']['candidates'][0]['content']['parts'][0]['text']
         # Extract the first JSON object from the output
         data = None
-        json_str = re.search(r'\{.*\}', llm_output, re.DOTALL)
+        # First, strip any code block markers
+        clean_output = strip_json_codeblock(llm_output)
+        json_str = re.search(r'\{.*\}', clean_output, re.DOTALL)
         if json_str:
             try:
                 data = json.loads(json_str.group())
             except json.JSONDecodeError:
                 logger.warning(f"Could not decode JSON from LLM output. Page {page_num}, sample {sample_num}.")
-                data = llm_output
+                data = clean_output
         else:
-            data = llm_output
+            data = clean_output
 
         if page_num not in results_by_page:
             results_by_page[page_num] = {}

@@ -4,6 +4,38 @@ import re
 from typing import List, Dict, Any, Optional
 
 
+def strip_json_codeblock(text: str) -> str:
+    """
+    Strip markdown code block markers from JSON text.
+    Handles both ```json and ``` code blocks.
+    
+    Args:
+        text: Raw text that may contain code block markers
+        
+    Returns:
+        Clean text with code block markers removed
+    """
+    # Remove leading/trailing whitespace
+    text = text.strip()
+    
+    # Check for code block pattern: ```json or ``` at start, ``` at end
+    if text.startswith('```'):
+        # Find the end of the first line (opening fence)
+        first_line_end = text.find('\n')
+        if first_line_end != -1:
+            # Remove opening fence (```json or ```)
+            text = text[first_line_end + 1:]
+        else:
+            # If no newline, remove the opening fence
+            text = text.lstrip('`').lstrip('json').strip()
+    
+    # Remove closing fence if present
+    if text.endswith('```'):
+        text = text[:-3].rstrip()
+    
+    return text.strip()
+
+
 def sample_majority_vote(
     df: pl.DataFrame,
     group_by_cols: List[str],
