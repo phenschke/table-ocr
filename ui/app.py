@@ -6,6 +6,14 @@ import streamlit as st
 import sys
 from pathlib import Path
 
+# Import constants
+from constants import (
+    ICON_FOLDER,
+    ICON_CHAT,
+    ICON_TABLE_CHART,
+    ICON_DESCRIPTION
+)
+
 # Add parent directory to path to find table_ocr package
 parent_dir = Path(__file__).parent.parent.absolute()
 if str(parent_dir) not in sys.path:
@@ -69,26 +77,26 @@ if 'current_page' not in st.session_state:
 projects_page = st.Page(
     "pages/projects.py",
     title="Projects",
-    icon=":material/folder:",
+    icon=ICON_FOLDER,
     default=True
 )
 
 prompts_page = st.Page(
     "pages/prompts.py",
     title="Prompts",
-    icon=":material/chat:"
+    icon=ICON_CHAT
 )
 
 schemas_page = st.Page(
     "pages/schemas.py",
     title="Schemas",
-    icon=":material/table_chart:"
+    icon=ICON_TABLE_CHART
 )
 
 file_details_page = st.Page(
     "pages/file_details.py",
     title="File Details",
-    icon=":material/description:"
+    icon=ICON_DESCRIPTION
 )
 
 # Store page objects in session state so page files can access them

@@ -10,7 +10,8 @@ from ui.models import OutputSchema
 from ui.dataframe_utils import load_results_as_dataframe
 from ui.constants import (
     RESULTS_DIR, COLOR_GREEN, COLOR_ORANGE,
-    STATUS_PROCESSED, STATUS_NOT_PROCESSED
+    STATUS_PROCESSED, STATUS_NOT_PROCESSED,
+    ICON_CODE, ICON_TABLE_CHART, ICON_DOWNLOAD
 )
 
 
@@ -116,7 +117,7 @@ def show_confirmation_dialog(
 def create_json_download_button(
     result_file: Path,
     key: str,
-    label: str = ":material/code: JSON"
+    label: str = f"{ICON_CODE} JSON"
 ) -> None:
     """Create a JSON download button.
     
@@ -140,7 +141,7 @@ def create_json_download_button(
 def create_csv_download_button(
     result_file: Path,
     key: str,
-    label: str = ":material/table_chart: CSV"
+    label: str = f"{ICON_TABLE_CHART} CSV"
 ) -> None:
     """Create a CSV download button if data can be converted.
     
@@ -183,12 +184,12 @@ def create_download_popover(
         disabled: Whether the button should be disabled
     """
     if not result_files or disabled:
-        st.button(":material/download:", disabled=True, use_container_width=True)
+        st.button(ICON_DOWNLOAD, disabled=True, use_container_width=True)
         return
     
     latest_result = result_files[0]
     
-    with st.popover(":material/download:", use_container_width=True):
+    with st.popover(ICON_DOWNLOAD, use_container_width=True):
         st.markdown("**Download as:**")
         
         # JSON download
@@ -250,7 +251,7 @@ def create_combined_download_popover(
     }
     
     st.download_button(
-        label=":material/code: JSON",
+        label=f"{ICON_CODE} JSON",
         data=json.dumps(combined_json, indent=2),
         file_name=f"{project_name}_all_results.json",
         mime="application/json",
@@ -264,7 +265,7 @@ def create_combined_download_popover(
         df = pl.DataFrame(all_data)
         csv_data = df.write_csv()
         st.download_button(
-            label=":material/table_chart: CSV",
+            label=f"{ICON_TABLE_CHART} CSV",
             data=csv_data,
             file_name=f"{project_name}_all_results.csv",
             mime="text/csv",
