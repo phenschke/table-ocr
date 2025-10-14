@@ -300,11 +300,26 @@ def parse_pdf_batch_results_file(file_path: str) -> BatchOCRResult:
             logger.warning("Skipping line without 'response' field.")
             continue
         # parse metadata from the request key we built when sending the batch
+        # Format: {pdf_name}_page_{page_num}_sample_{sample_num}
         key = line.get('key', '')
-        parts = key.split('_')
-        pdf_name = parts[0]
-        page_num = int(parts[2])
-        sample_num = int(parts[4])
+        
+        # Split by markers to handle PDF names with underscores
+        page_marker = '_page_'
+        sample_marker = '_sample_'
+        
+        if page_marker not in key or sample_marker not in key:
+            logger.warning(f"Skipping malformed key: {key}")
+            continue
+            
+        # Extract pdf_name (everything before _page_)
+        pdf_name = key.split(page_marker)[0]
+        
+        # Extract page_num (between _page_ and _sample_)
+        page_part = key.split(page_marker)[1].split(sample_marker)[0]
+        page_num = int(page_part)
+        
+        # Extract sample_num (everything after _sample_)
+        sample_num = int(key.split(sample_marker)[1])
     
         llm_output = line['response']['candidates'][0]['content']['parts'][0]['text']
         # Extract the first JSON object from the output

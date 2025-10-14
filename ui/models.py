@@ -144,12 +144,14 @@ class Prompt:
     name: str
     content: str
     created_at: datetime = field(default_factory=datetime.now)
+    last_modified: Optional[datetime] = None
     
     def to_dict(self) -> Dict:
         return {
             "name": self.name,
             "content": self.content,
-            "created_at": self.created_at.isoformat()
+            "created_at": self.created_at.isoformat(),
+            "last_modified": self.last_modified.isoformat() if self.last_modified else None
         }
     
     @classmethod
@@ -157,7 +159,8 @@ class Prompt:
         return cls(
             name=data["name"],
             content=data["content"],
-            created_at=datetime.fromisoformat(data.get("created_at", datetime.now().isoformat()))
+            created_at=datetime.fromisoformat(data.get("created_at", datetime.now().isoformat())),
+            last_modified=datetime.fromisoformat(data["last_modified"]) if data.get("last_modified") else None
         )
 
 

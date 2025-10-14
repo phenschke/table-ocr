@@ -5,4 +5,3 @@ PyMuPDF
 matplotlib
 ratelimit
 streamlit
-streamlit-option-menu

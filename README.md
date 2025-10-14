@@ -37,7 +37,7 @@ uv pip install -r requirements.txt
 
 # 4. Set API key & start UI
 export GEMINI_API_KEY='your-key'     # Linux/macOS (or set GEMINI_API_KEY=... on Windows)
-streamlit run ui/app.py
+cd ui && streamlit run app.py
 ```
 
 ### Using the UI
