@@ -87,18 +87,69 @@ class OutputSchema:
             created_at=datetime.fromisoformat(data.get("created_at", datetime.now().isoformat()))
         )
     
+    def to_pydantic_schema(self):
+        """
+        Convert to a Pydantic BaseModel class for use with the core API.
+
+        This is the RECOMMENDED method - Pydantic models are cleaner and provide
+        better type safety than manual genai.types.Schema construction.
+
+        Returns:
+            A Pydantic BaseModel class that can be passed directly to response_schema
+        """
+        from typing import Optional, List
+        from pydantic import BaseModel, Field, create_model
+
+        # Map UI field types to Python types
+        type_map = {
+            "STRING": str,
+            "INTEGER": int,
+            "BOOLEAN": bool,
+            "NUMBER": float,
+        }
+
+        # Build field definitions for the row model
+        row_fields = {}
+        for field_def in self.fields:
+            python_type = type_map.get(field_def.field_type, str)
+
+            if field_def.required:
+                # Required field: (type, ...)
+                row_fields[field_def.name] = (python_type, ...)
+            else:
+                # Optional field with None default
+                row_fields[field_def.name] = (Optional[python_type], None)
+
+        # Create the row model dynamically
+        row_model_name = f"{self.name.replace(' ', '_')}_Row"
+        row_model = create_model(row_model_name, **row_fields)
+
+        # Create the table wrapper model
+        table_model_name = f"{self.name.replace(' ', '_')}_Table"
+        table_model = create_model(
+            table_model_name,
+            table=(List[row_model], Field(description="Extracted table rows"))
+        )
+
+        return table_model
+
     def to_genai_schema(self) -> genai.types.Schema:
-        """Convert to Google genai Schema object for use with the core API."""
+        """
+        Convert to Google genai Schema object for use with the core API.
+
+        DEPRECATED: Use to_pydantic_schema() instead for cleaner code.
+        This method is kept for backward compatibility.
+        """
         # Build properties dict
         properties = {}
         required_fields = []
         property_ordering = []
-        
+
         for field_def in self.fields:
             property_ordering.append(field_def.name)
             if field_def.required:
                 required_fields.append(field_def.name)
-            
+
             # Map field type string to genai Type
             type_map = {
                 "STRING": genai.types.Type.STRING,
@@ -108,7 +159,7 @@ class OutputSchema:
             }
             field_type = type_map.get(field_def.field_type, genai.types.Type.STRING)
             properties[field_def.name] = genai.types.Schema(type=field_type)
-        
+
         # Create the schema with a table array structure
         return genai.types.Schema(
             type=genai.types.Type.OBJECT,

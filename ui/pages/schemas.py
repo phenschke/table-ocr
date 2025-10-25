@@ -1,158 +1,294 @@
 """
-Schemas page - manage output schema definitions
+Schemas page - manage output schema definitions.
 """
+from __future__ import annotations
+
+from typing import Dict, List
+
 import streamlit as st
 
-from ui.storage import DataStore
+from ui.components import (
+    ActionSpec,
+    render_action_row,
+    render_confirmation_modal,
+    render_metadata_chips,
+    render_status_badge,
+)
+from ui.constants import (
+    ICON_ADD,
+    ICON_ARROW_DOWN,
+    ICON_ARROW_UP,
+    ICON_DELETE,
+    ICON_TABLE_CHART,
+)
+from ui.feedback import info, success, warning
 from ui.models import OutputSchema, SchemaField
-from ui.utils import ensure_cleared_file_state, show_confirmation_dialog
-from ui.constants import ICON_TABLE_CHART, ICON_DELETE, ICON_ADD
+from ui.storage import DataStore
+from ui.utils import clear_file_viewing_state
 
 # Initialize data store
 store = DataStore()
 
 # Clear file viewing state when navigating to this page
-ensure_cleared_file_state()
+clear_file_viewing_state()
+
+# Add max-width styling for better readability on wide screens
+st.markdown("""
+    <style>
+    .main .block-container {
+        max-width: 1000px;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 st.header("Output Schemas")
 
-# Create new schema
-with st.expander("Create New Schema"):
-    new_schema_name = st.text_input("Schema Name", key="new_schema_name")
-    
-    st.subheader("Fields")
-    
-    # Initialize session state for fields
-    if 'schema_fields' not in st.session_state:
-        st.session_state.schema_fields = []
-    
-    # Display fields
-    fields_to_create = []
-    for i, field_data in enumerate(st.session_state.schema_fields):
-        col_a, col_b, col_c, col_d = st.columns([3, 2, 1, 1])
-        
-        with col_a:
-            field_name = st.text_input(
-                "Field Name",
-                value=field_data.get("name", ""),
-                key=f"field_name_{i}",
-                label_visibility="collapsed",
-                placeholder="Field name"
-            )
-        
-        with col_b:
-            field_type = st.selectbox(
-                "Type",
-                ["STRING", "INTEGER", "BOOLEAN", "NUMBER"],
-                index=["STRING", "INTEGER", "BOOLEAN", "NUMBER"].index(
-                    field_data.get("type", "STRING")
-                ),
-                key=f"field_type_{i}",
-                label_visibility="collapsed"
-            )
-        
-        with col_c:
-            field_required = st.checkbox(
-                "Required",
-                value=field_data.get("required", False),
-                key=f"field_required_{i}"
-            )
-        
-        with col_d:
-            if st.button(f"{ICON_DELETE}", key=f"remove_field_{i}"):
-                st.session_state[f"confirm_remove_field_{i}"] = True
+FLASH_KEY = "schemas__flash_messages"
+BUILDER_FIELDS_KEY = "schemas.builder.fields"
+
+
+def queue_flash(level: str, message: str) -> None:
+    st.session_state.setdefault(FLASH_KEY, []).append((level, message))
+
+
+if flashes := st.session_state.pop(FLASH_KEY, None):
+    for level, message in flashes:
+        {"success": success, "info": info, "warning": warning}[level](message)
+
+
+def get_builder_fields() -> List[Dict[str, str]]:
+    return st.session_state.setdefault(
+        BUILDER_FIELDS_KEY,
+        [],
+    )
+
+
+def reset_builder() -> None:
+    st.session_state[BUILDER_FIELDS_KEY] = []
+    # Clear the schema name widget by deleting its key
+    st.session_state.pop("schemas.builder.name", None)
+
+
+def render_field_editor(field: Dict[str, str], index: int) -> None:
+    col_name, col_type, col_required, col_actions = st.columns([4, 2, 1, 1])
+
+    field["name"] = st.text_input(
+        "Field name",
+        key=f"schemas.field.name::{index}",
+        value=field.get("name", ""),
+        label_visibility="collapsed",
+        placeholder="Field name",
+    )
+
+    field["type"] = st.selectbox(
+        "Type",
+        options=["STRING", "INTEGER", "BOOLEAN", "NUMBER"],
+        index=["STRING", "INTEGER", "BOOLEAN", "NUMBER"].index(field.get("type", "STRING")),
+        key=f"schemas.field.type::{index}",
+        label_visibility="collapsed",
+    )
+
+    field["required"] = st.checkbox(
+        "Required",
+        key=f"schemas.field.required::{index}",
+        value=field.get("required", False),
+    )
+
+    with col_actions:
+        up_disabled = index == 0
+        down_disabled = index == len(get_builder_fields()) - 1
+
+        action_cols = st.columns(2)
+        with action_cols[0]:
+            if st.button(
+                ICON_ARROW_UP,
+                key=f"schemas.field.up::{index}",
+                disabled=up_disabled,
+                help="Move up",
+            ):
+                fields = get_builder_fields()
+                fields[index - 1], fields[index] = fields[index], fields[index - 1]
                 st.rerun()
-            
-            # Confirmation dialog for field removal
-            if st.session_state.get(f"confirm_remove_field_{i}", False):
-                @st.dialog("Confirm Field Removal")
-                def confirm_remove_field():
-                    def on_confirm():
-                        st.session_state.schema_fields.pop(i)
-                        st.session_state[f"confirm_remove_field_{i}"] = False
-                        st.rerun()
-                    
-                    show_confirmation_dialog(
-                        title="Confirm Field Removal",
-                        message=f"Remove field **{field_name or '(unnamed)'}**?",
-                        on_confirm=on_confirm
-                    )
-                    
-                    # Handle cancel
-                    if st.session_state.get('_dialog_cancelled', False):
-                        st.session_state[f"confirm_remove_field_{i}"] = False
-                        st.rerun()
-                confirm_remove_field()
-        
-        if field_name:
-            fields_to_create.append(SchemaField(
-                name=field_name,
-                field_type=field_type,
-                required=field_required
-            ))
-    
-    # Add field button (below the list of fields)
-    col1, col2 = st.columns([1, 3])
-    with col1:
-        if st.button(f"{ICON_ADD} Add Field"):
-            st.session_state.schema_fields.append({
-                "name": "",
-                "type": "STRING",
-                "required": False
-            })
-            st.rerun()
-    
-    if st.button("Create Schema"):
-        if new_schema_name and fields_to_create:
-            schema = OutputSchema(name=new_schema_name, fields=fields_to_create)
-            store.save_schema(schema)
-            st.success(f"Schema '{new_schema_name}' created!")
-            st.session_state.schema_fields = []
-            st.rerun()
+        with action_cols[1]:
+            if st.button(
+                ICON_ARROW_DOWN,
+                key=f"schemas.field.down::{index}",
+                disabled=down_disabled,
+                help="Move down",
+            ):
+                fields = get_builder_fields()
+                fields[index + 1], fields[index] = fields[index], fields[index + 1]
+                st.rerun()
+
+        if st.button(
+            ICON_DELETE,
+            key=f"schemas.field.delete::{index}",
+            help="Remove field",
+        ):
+            st.session_state[f"schemas.builder.confirm_remove::{index}"] = True
+
+    render_field_delete_dialog(index, field.get("name", ""))
+
+
+def render_field_delete_dialog(index: int, field_name: str) -> None:
+    key = f"schemas.builder.confirm_remove::{index}"
+    if not st.session_state.get(key):
+        return
+
+    def on_confirm() -> None:
+        fields = get_builder_fields()
+        if 0 <= index < len(fields):
+            fields.pop(index)
+        st.session_state.pop(key, None)
+
+    def on_cancel() -> None:
+        st.session_state.pop(key, None)
+
+    render_confirmation_modal(
+        title="Remove Field",
+        message=f"Remove field **{field_name or '(unnamed)'}**?",
+        on_confirm=on_confirm,
+        confirm_label="Remove field",
+        cancel_label="Keep field",
+        danger=True,
+        on_cancel=on_cancel,
+        key=key,
+    )
+
+
+def render_schema_builder() -> None:
+    with st.container(border=True):
+        st.subheader(f"{ICON_ADD} Create Schema")
+        new_schema_name = st.text_input("Schema name", key="schemas.builder.name")
+
+        fields = get_builder_fields()
+        if not fields:
+            info("Add fields to describe the shape of your table output.")
+
+        for i, field in enumerate(list(fields)):
+            render_field_editor(field, i)
+
+        add_col, _ = st.columns([1, 3])
+        with add_col:
+            if st.button(f"{ICON_ADD} Add Field", key="schemas.add_field"):
+                fields.append({"name": "", "type": "STRING", "required": False})
+                st.rerun()
+
+        if st.button(
+            "Create Schema",
+            type="primary",
+            disabled=not (new_schema_name and any(f.get("name") for f in fields)),
+        ):
+            create_schema(new_schema_name, fields)
+
+
+def create_schema(name: str, field_defs: List[Dict[str, str]]) -> None:
+    valid_fields = [
+        SchemaField(
+            name=f["name"],
+            field_type=f.get("type", "STRING"),
+            required=f.get("required", False),
+        )
+        for f in field_defs
+        if f.get("name")
+    ]
+
+    if not valid_fields:
+        warning("Please provide at least one field with a name.")
+        return
+
+    schema = OutputSchema(name=name, fields=valid_fields)
+    store.save_schema(schema)
+    queue_flash("success", f"Schema '{name}' created.")
+    reset_builder()
+    st.rerun()
+
+
+def render_schema_card(schema: OutputSchema) -> None:
+    with st.container(border=True):
+        st.subheader(f"{ICON_TABLE_CHART} {schema.name}")
+
+        metadata = [
+            ("Created", schema.created_at.strftime("%Y-%m-%d %H:%M")),
+            ("Fields", str(len(schema.fields))),
+        ]
+        render_metadata_chips(metadata)
+
+        projects = store.get_projects()
+        in_use_by = [p.name for p in projects if p.schema_name == schema.name]
+        if in_use_by:
+            render_status_badge(
+                f"Used by {len(in_use_by)} project(s)",
+                variant="info",
+            )
+
+        if schema.fields:
+            field_table = [
+                {
+                    "Field": field.name,
+                    "Type": field.field_type,
+                    "Required": "Yes" if field.required else "No",
+                }
+                for field in schema.fields
+            ]
+            st.table(field_table)
         else:
-            st.error("Please enter a schema name and add at least one field")
+            info("This schema has no fields.")
 
-# List existing schemas
-schemas = store.get_schemas()
+        actions = [
+            ActionSpec(
+                label=f"{ICON_DELETE} Delete",
+                key=f"schemas.delete::{schema.name}",
+                on_click=lambda name=schema.name: request_schema_delete(name),
+            )
+        ]
+        render_action_row(actions)
 
+    render_schema_delete_dialog(schema, in_use_by)
+
+
+def request_schema_delete(schema_name: str) -> None:
+    st.session_state[f"schemas.confirm_delete::{schema_name}"] = True
+
+
+def render_schema_delete_dialog(schema: OutputSchema, in_use_by: List[str]) -> None:
+    key = f"schemas.confirm_delete::{schema.name}"
+    if not st.session_state.get(key):
+        return
+
+    warning_text = None
+    if in_use_by:
+        warning_text = (
+            f"This schema is referenced by {len(in_use_by)} project(s): {', '.join(in_use_by)}."
+        )
+
+    def on_confirm() -> None:
+        store.delete_schema(schema.name)
+        st.session_state.pop(key, None)
+        queue_flash("success", f"Deleted schema '{schema.name}'.")
+
+    def on_cancel() -> None:
+        st.session_state.pop(key, None)
+
+    render_confirmation_modal(
+        title="Delete Schema",
+        message=f"Delete schema **{schema.name}**?",
+        on_confirm=on_confirm,
+        confirm_label="Delete schema",
+        cancel_label="Cancel",
+        warning=warning_text,
+        danger=True,
+        on_cancel=on_cancel,
+        key=key,
+    )
+
+
+# Page layout
+render_schema_builder()
+
+schemas = sorted(store.get_schemas(), key=lambda s: s.created_at, reverse=True)
 if not schemas:
-    st.info("No schemas yet. Create one above!")
+    info("No schemas yet. Create one above to get started.")
 else:
     for schema in schemas:
-        with st.expander(f"{ICON_TABLE_CHART} {schema.name}"):
-            st.write(f"**Created:** {schema.created_at.strftime('%Y-%m-%d %H:%M')}")
-            st.write(f"**Fields:** {len(schema.fields)}")
-            
-            # Display fields as table
-            if schema.fields:
-                st.subheader("Fields:")
-                for field in schema.fields:
-                    required_mark = "✓" if field.required else ""
-                    st.write(f"- **{field.name}** ({field.field_type}) {required_mark}")
-            
-            if st.button(f"{ICON_DELETE} Delete", key=f"delete_schema_{schema.name}"):
-                st.session_state[f"confirm_delete_schema_{schema.name}"] = True
-                st.rerun()
-            
-            # Confirmation dialog
-            if st.session_state.get(f"confirm_delete_schema_{schema.name}", False):
-                @st.dialog("Confirm Schema Deletion")
-                def confirm_delete_schema():
-                    def on_confirm():
-                        store.delete_schema(schema.name)
-                        st.session_state[f"confirm_delete_schema_{schema.name}"] = False
-                        st.success(f"Deleted schema '{schema.name}'")
-                        st.rerun()
-                    
-                    show_confirmation_dialog(
-                        title="Confirm Schema Deletion",
-                        message=f"Are you sure you want to delete schema **{schema.name}**?",
-                        on_confirm=on_confirm,
-                        warning_text="Projects using this schema will need to be updated."
-                    )
-                    
-                    # Handle cancel
-                    if st.session_state.get('_dialog_cancelled', False):
-                        st.session_state[f"confirm_delete_schema_{schema.name}"] = False
-                        st.rerun()
-                confirm_delete_schema()
+        render_schema_card(schema)

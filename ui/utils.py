@@ -8,10 +8,18 @@ import json
 
 from ui.models import OutputSchema
 from ui.dataframe_utils import load_results_as_dataframe
+from ui.state import (
+    clear_view_state,
+    get_viewing_file,
+    set_viewing_context,
+)
 from ui.constants import (
-    RESULTS_DIR, COLOR_GREEN, COLOR_ORANGE,
-    STATUS_PROCESSED, STATUS_NOT_PROCESSED,
-    ICON_CODE, ICON_TABLE_CHART, ICON_DOWNLOAD
+    RESULTS_DIR,
+    STATUS_PROCESSED,
+    STATUS_NOT_PROCESSED,
+    ICON_CODE,
+    ICON_TABLE_CHART,
+    ICON_DOWNLOAD,
 )
 
 
@@ -19,15 +27,25 @@ from ui.constants import (
 
 def clear_file_viewing_state():
     """Clear file viewing session state."""
-    st.session_state.viewing_file = None
-    st.session_state.viewing_project = None
+    clear_view_state()
 
 
 def ensure_cleared_file_state():
     """Clear file state if set, then rerun."""
-    if st.session_state.get('viewing_file') is not None:
-        clear_file_viewing_state()
-        st.rerun()
+    if get_viewing_file() is not None:
+        clear_viewing_state_and_rerun()
+
+
+def clear_viewing_state_and_rerun():
+    """Clear view state and trigger rerun to reset dependent UI."""
+    clear_view_state()
+    set_viewing_context(None, None)
+    st.rerun()
+
+
+def set_viewing_state(file_path: str, project_name: str) -> None:
+    """Persist the viewing context."""
+    set_viewing_context(file_path, project_name)
 
 
 # ===== Result File Management =====
@@ -53,6 +71,58 @@ def get_result_files(project_name: str, pdf_path: str) -> List[Path]:
     )
 
 
+def _extract_numeric_suffix(stem: str, pdf_stem: str, suffix: Optional[str]) -> Optional[int]:
+    """Extract the numeric run suffix from a result filename stem."""
+    prefix = f"{pdf_stem}_"
+    if not stem.startswith(prefix):
+        return None
+
+    remainder = stem[len(prefix):]
+
+    if suffix:
+        suffix_token = f"_{suffix}"
+        if not remainder.endswith(suffix_token):
+            return None
+        remainder = remainder[: -len(suffix_token)]
+    else:
+        if "_" in remainder:
+            return None
+
+    return int(remainder) if remainder.isdigit() else None
+
+
+def get_next_result_path(project_name: str, pdf_path: str, suffix: Optional[str] = None) -> Path:
+    """Determine the next result file path using an incrementing counter.
+    
+    Args:
+        project_name: Name of the project
+        pdf_path: Original PDF path
+        suffix: Optional suffix (e.g., 'batch')
+    
+    Returns:
+        Path where the next result run should be stored
+    """
+    results_dir = RESULTS_DIR / project_name
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    pdf_stem = Path(pdf_path).stem
+    existing_numbers = []
+
+    for path in results_dir.glob(f"{pdf_stem}_*.json"):
+        number = _extract_numeric_suffix(path.stem, pdf_stem, suffix)
+        if number is not None:
+            existing_numbers.append(number)
+
+    next_index = (max(existing_numbers) + 1) if existing_numbers else 1
+
+    while True:
+        suffix_part = f"_{suffix}" if suffix else ""
+        candidate = results_dir / f"{pdf_stem}_{next_index}{suffix_part}.json"
+        if not candidate.exists():
+            return candidate
+        next_index += 1
+
+
 def get_file_status_badge(result_files: List[Path]) -> tuple[str, str]:
     """Get status badge emoji and color for a file.
     
@@ -60,11 +130,11 @@ def get_file_status_badge(result_files: List[Path]) -> tuple[str, str]:
         result_files: List of result files for the PDF
         
     Returns:
-        Tuple of (badge_text, color_name)
+        Tuple of (badge_text, variant_name)
     """
     if result_files:
-        return f"{STATUS_PROCESSED} ({len(result_files)})", COLOR_GREEN
-    return STATUS_NOT_PROCESSED, COLOR_ORANGE
+        return f"{STATUS_PROCESSED} · {len(result_files)} run(s)", "success"
+    return STATUS_NOT_PROCESSED, "warning"
 
 
 # ===== Confirmation Dialogs =====

@@ -43,17 +43,25 @@ def get_api_key() -> str:
 
 class GeminiClient:
     """Wrapper for Gemini client with reusable connection."""
-    
+
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or get_api_key()
         self._client = None
-    
+        self._aclient = None
+
     @property
     def client(self) -> genai.Client:
         """Get or create Gemini client."""
         if self._client is None:
             self._client = genai.Client(api_key=self.api_key)
         return self._client
+
+    @property
+    def aclient(self):
+        """Get or create async Gemini client."""
+        if self._aclient is None:
+            self._aclient = genai.Client(api_key=self.api_key).aio
+        return self._aclient
 
     @sleep_and_retry
     @limits(calls=15, period=60)
@@ -62,6 +70,17 @@ class GeminiClient:
         Calls the Gemini API's generate_content method with rate limiting.
         """
         return self.client.models.generate_content(
+            model=model_name,
+            contents=contents,
+            config=generation_config
+        )
+
+    async def agenerate_content(self, model_name: str, contents, generation_config: dict):
+        """
+        Async version of generate_content.
+        Note: Rate limiting is handled at the higher level with semaphore.
+        """
+        return await self.aclient.models.generate_content(
             model=model_name,
             contents=contents,
             config=generation_config
@@ -239,7 +258,8 @@ def build_generation_config(
     Builds a generation configuration dictionary for the Gemini API.
 
     Args:
-        response_schema: The schema for the response.
+        response_schema: The schema for the response. Can be a genai.types.Schema
+                        or a Pydantic BaseModel class.
         thinking_budget: The thinking budget.
         temperature: The temperature.
         top_p: The top-p value.
@@ -256,7 +276,13 @@ def build_generation_config(
 
     if response_schema:
         gen_config["response_mime_type"] = "application/json"
-        gen_config["response_schema"] = response_schema.to_json_dict()
+        # Handle both genai.types.Schema and Pydantic BaseModel
+        if hasattr(response_schema, "to_json_dict"):
+            # genai.types.Schema has this method
+            gen_config["response_schema"] = response_schema.to_json_dict()
+        else:
+            # Pydantic model or dict - pass directly
+            gen_config["response_schema"] = response_schema
 
     if thinking_budget is not None:
         gen_config["thinking_config"] = types.ThinkingConfig(thinking_budget=thinking_budget).to_json_dict()
