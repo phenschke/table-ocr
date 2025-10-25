@@ -36,7 +36,8 @@ def create_batch_ocr_job(
     generation_config: Optional[Dict[str, Any]] = None,
     response_schema=None,
     jsonl_dir: Optional[str] = None,
-    display: bool = False
+    display: bool = False,
+    progress_callback=None
 ) -> str:
     """
     Create a batch OCR job for processing PDF pages asynchronously.
@@ -51,12 +52,16 @@ def create_batch_ocr_job(
         generation_config: Configuration for the generation process.
         response_schema: Schema for structured output.
         jsonl_dir: Optional directory to save the batch requests JSONL file. If None, saves in current directory.
-        
+        progress_callback: Optional callback function(message: str, percentage: float) for progress updates.
+
     Returns:
         Batch job name for monitoring and retrieving results.
     """
 
     # Convert PDF pages to images
+    if progress_callback:
+        progress_callback("Converting PDF pages to images...", 0.05)
+
     images = pdf_pages_to_images(
         pdf_path=pdf_path,
         max_pages=max_pages,
@@ -65,6 +70,9 @@ def create_batch_ocr_job(
         display=display
     )
     client = GeminiClient()
+
+    if progress_callback:
+        progress_callback(f"Converted {len(images)} page(s). Preparing upload...", 0.10)
 
     # Define base names for jobs and files
     pdf_name_stem = Path(pdf_path).stem
@@ -83,6 +91,12 @@ def create_batch_ocr_job(
         buf = io.BytesIO()
         img.save(buf, format=img_format)
         buf.seek(0)
+
+        # Progress update for image uploads (10% to 60% of total progress)
+        upload_progress = 0.10 + (0.50 * (page_idx / len(images)))
+        if progress_callback:
+            progress_callback(f"Uploading image {page_idx+1}/{len(images)}...", upload_progress)
+
         logger.info(f"Uploading image {page_idx+1}/{len(images)}: {image_filename} (in-memory)")
         uploaded_img = client.client.files.upload(
             file=buf,
@@ -95,6 +109,9 @@ def create_batch_ocr_job(
         logger.info(f"Uploaded image {page_idx+1}/{len(images)}: {uploaded_img.name}")
 
     # Build batch requests referencing uploaded file IDs
+    if progress_callback:
+        progress_callback("Building batch requests...", 0.65)
+
     batch_requests = []
     for page_idx, uploaded_img in enumerate(uploaded_images):
         page_index = start_page + page_idx
@@ -127,9 +144,12 @@ def create_batch_ocr_job(
     
     if job_display_name is None:
         job_display_name = f"ocr-batch-{base_name}"
-    
+
+    if progress_callback:
+        progress_callback(f"Creating batch job with {len(batch_requests)} requests...", 0.70)
+
     logger.info(f"Creating batch job '{job_display_name}' with {len(batch_requests)} requests...")
-    
+
     # Create the batch requests jsonl file
     if jsonl_dir is not None:
         Path(jsonl_dir).mkdir(parents=True, exist_ok=True)
@@ -141,19 +161,26 @@ def create_batch_ocr_job(
             f.write(json.dumps(req, default=str) + "\n")
 
     # Upload batch requests jsonl file to google file API
+    if progress_callback:
+        progress_callback("Uploading batch requests file...", 0.80)
+
     uploaded_file = client.client.files.upload(
         file=jsonl_filename,
         config=types.UploadFileConfig(
-            display_name=f"batch-requests-{base_name}", 
+            display_name=f"batch-requests-{base_name}",
             mime_type="jsonl"
         )
     )
-    
+
     if not uploaded_file.name:
         raise ValueError("Failed to get name for uploaded batch requests file.")
-        
+
     logger.info(f"Uploaded batch requests file: {uploaded_file.name}")
+
     # Create batch job with file
+    if progress_callback:
+        progress_callback("Creating batch job...", 0.90)
+
     batch_config = types.CreateBatchJobConfig(display_name=job_display_name)
     batch_job = client.client.batches.create(
         model=model_name,
@@ -165,8 +192,12 @@ def create_batch_ocr_job(
     
     if not batch_job.name:
         raise ValueError("Failed to create batch job or get job name.")
-        
+
     logger.info(f"Created batch job: {batch_job.name}")
+
+    if progress_callback:
+        progress_callback("Batch job created successfully!", 1.0)
+
     return batch_job.name
 
 

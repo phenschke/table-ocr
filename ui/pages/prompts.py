@@ -1,144 +1,241 @@
 """
-Prompts page - manage OCR prompt templates
+Prompts page - manage OCR prompt templates.
 """
-import streamlit as st
-from datetime import datetime
+from __future__ import annotations
 
-from ui.storage import DataStore
-from ui.models import Prompt
-from ui.utils import ensure_cleared_file_state, show_confirmation_dialog
+from datetime import datetime
+from typing import Dict, List
+
+import streamlit as st
+
+from ui.components import ActionSpec, render_action_row, render_metadata_chips, render_status_badge
 from ui.constants import (
-    ICON_CHAT, ICON_DELETE, ICON_EDIT, ICON_SAVE, ICON_CANCEL, ICON_WARNING,
-    TEXTAREA_PROMPT_HEIGHT, TEXTAREA_PROMPT_VIEW_HEIGHT
+    ICON_ADD,
+    ICON_CANCEL,
+    ICON_CHAT,
+    ICON_DELETE,
+    ICON_EDIT,
+    ICON_SAVE,
+    TEXTAREA_PROMPT_HEIGHT,
+    TEXTAREA_PROMPT_VIEW_HEIGHT,
 )
+from ui.feedback import info, success, warning
+from ui.models import Prompt
+from ui.storage import DataStore
+from ui.utils import clear_file_viewing_state
 
 # Initialize data store
 store = DataStore()
 
 # Clear file viewing state when navigating to this page
-ensure_cleared_file_state()
+clear_file_viewing_state()
+
+# Add max-width styling for better readability on wide screens
+st.markdown("""
+    <style>
+    .main .block-container {
+        max-width: 1000px;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 st.header("Prompts")
 
-# Create new prompt
-with st.expander("Create New Prompt"):
-    new_prompt_name = st.text_input("Prompt Name", key="new_prompt_name")
-    new_prompt_content = st.text_area(
-        "Prompt Content",
-        height=TEXTAREA_PROMPT_HEIGHT,
-        key="new_prompt_content",
-        help="Enter the instruction text for the OCR task"
-    )
-    
-    if st.button("Create Prompt"):
-        if new_prompt_name and new_prompt_content:
+FLASH_KEY = "prompts__flash_messages"
+EDIT_STATE_KEY = "prompts.editing"
+
+
+def queue_flash(level: str, message: str) -> None:
+    st.session_state.setdefault(FLASH_KEY, []).append((level, message))
+
+
+if flashes := st.session_state.pop(FLASH_KEY, None):
+    for level, message in flashes:
+        {"success": success, "info": info, "warning": warning}[level](message)
+
+
+def get_edit_state() -> Dict[str, Dict[str, str]]:
+    return st.session_state.setdefault(EDIT_STATE_KEY, {})
+
+
+def clear_edit_state(prompt_name: str) -> None:
+    get_edit_state().pop(prompt_name, None)
+
+
+def render_create_prompt() -> None:
+    with st.container(border=True):
+        st.subheader(f"{ICON_ADD} Create Prompt")
+        new_prompt_name = st.text_input("Prompt name", key="prompts.new.name")
+        new_prompt_content = st.text_area(
+            "Prompt content",
+            key="prompts.new.content",
+            height=TEXTAREA_PROMPT_HEIGHT,
+            help="Enter instructions that guide OCR extraction.",
+        )
+
+        can_create = bool(new_prompt_name and new_prompt_content)
+
+        if st.button(
+            f"{ICON_SAVE} Save Prompt",
+            type="primary",
+            disabled=not can_create,
+            use_container_width=False,
+        ):
             prompt = Prompt(name=new_prompt_name, content=new_prompt_content)
             store.save_prompt(prompt)
-            st.success(f"Prompt '{new_prompt_name}' created!")
+            queue_flash("success", f"Prompt '{new_prompt_name}' created.")
+            # Clear the form by deleting the widget keys before rerun
+            del st.session_state["prompts.new.name"]
+            del st.session_state["prompts.new.content"]
             st.rerun()
+
+
+def render_prompt_card(prompt: Prompt) -> None:
+    edit_state = get_edit_state()
+    state = edit_state.get(prompt.name, {"editing": False, "content": prompt.content})
+    is_editing = state.get("editing", False)
+
+    with st.container(border=True):
+        st.subheader(f"{ICON_CHAT} {prompt.name}")
+
+        metadata: List[tuple[str, str]] = [
+            ("Created", prompt.created_at.strftime("%Y-%m-%d %H:%M")),
+        ]
+        if prompt.last_modified:
+            metadata.append(("Updated", prompt.last_modified.strftime("%Y-%m-%d %H:%M")))
+        render_metadata_chips(metadata)
+
+        projects = store.get_projects()
+        in_use_by = [p.name for p in projects if p.prompt_name == prompt.name]
+        if in_use_by:
+            render_status_badge(
+                f"Used by {len(in_use_by)} project(s)",
+                variant="info",
+            )
+
+        if is_editing:
+            state.setdefault("content", prompt.content)
+            edited_content = st.text_area(
+                "Content",
+                key=f"prompts.edit.content::{prompt.name}",
+                value=state["content"],
+                height=TEXTAREA_PROMPT_VIEW_HEIGHT,
+                help="Update the instructions for OCR extraction.",
+            )
+            state["content"] = edited_content
+
+            if in_use_by:
+                warning(
+                    f"Changes will affect future runs for: {', '.join(in_use_by)}."
+                )
+
+            actions = [
+                ActionSpec(
+                    label=f"{ICON_SAVE} Save",
+                    key=f"prompts.save::{prompt.name}",
+                    on_click=lambda p=prompt, content=edited_content: save_prompt_changes(
+                        p, content
+                    ),
+                    disabled=not edited_content.strip(),
+                    button_type="primary",
+                ),
+                ActionSpec(
+                    label=f"{ICON_CANCEL} Cancel",
+                    key=f"prompts.cancel::{prompt.name}",
+                    on_click=lambda name=prompt.name: cancel_edit(name),
+                ),
+            ]
+            render_action_row(actions, columns=[1, 1])
         else:
-            st.error("Please fill in all fields")
+            st.text_area(
+                "Content",
+                value=prompt.content,
+                height=TEXTAREA_PROMPT_VIEW_HEIGHT,
+                key=f"prompts.view.content::{prompt.name}",
+                disabled=True,
+            )
 
-# List existing prompts
-prompts = store.get_prompts()
+            actions = [
+                ActionSpec(
+                    label=f"{ICON_EDIT} Edit",
+                    key=f"prompts.edit::{prompt.name}",
+                    on_click=lambda name=prompt.name, content=prompt.content: start_edit(
+                        name, content
+                    ),
+                ),
+                ActionSpec(
+                    label=f"{ICON_DELETE} Delete",
+                    key=f"prompts.delete::{prompt.name}",
+                    on_click=lambda name=prompt.name: request_delete_prompt(name),
+                ),
+            ]
+            render_action_row(actions, columns=[1, 1])
 
+    render_delete_dialog(prompt, in_use_by)
+
+
+def start_edit(prompt_name: str, content: str) -> None:
+    edit_state = get_edit_state()
+    edit_state[prompt_name] = {"editing": True, "content": content}
+
+
+def cancel_edit(prompt_name: str) -> None:
+    clear_edit_state(prompt_name)
+
+
+def save_prompt_changes(prompt: Prompt, new_content: str) -> None:
+    prompt.content = new_content
+    prompt.last_modified = datetime.now()
+    store.save_prompt(prompt)
+    clear_edit_state(prompt.name)
+    queue_flash("success", f"Prompt '{prompt.name}' updated.")
+
+
+def request_delete_prompt(prompt_name: str) -> None:
+    st.session_state[f"prompts.confirm_delete::{prompt_name}"] = True
+
+
+def render_delete_dialog(prompt: Prompt, in_use_by: List[str]) -> None:
+    key = f"prompts.confirm_delete::{prompt.name}"
+    if not st.session_state.get(key):
+        return
+
+    from ui.components import render_confirmation_modal
+
+    warning_text = None
+    if in_use_by:
+        warning_text = (
+            f"This prompt is referenced by {len(in_use_by)} project(s): {', '.join(in_use_by)}."
+        )
+
+    def on_confirm() -> None:
+        store.delete_prompt(prompt.name)
+        clear_edit_state(prompt.name)
+        st.session_state.pop(key, None)
+        queue_flash("success", f"Deleted prompt '{prompt.name}'.")
+
+    def on_cancel() -> None:
+        st.session_state.pop(key, None)
+
+    render_confirmation_modal(
+        title="Delete Prompt",
+        message=f"Delete prompt **{prompt.name}**?",
+        on_confirm=on_confirm,
+        confirm_label="Delete",
+        cancel_label="Cancel",
+        warning=warning_text,
+        danger=True,
+        on_cancel=on_cancel,
+        key=key,
+    )
+
+
+# Page layout
+render_create_prompt()
+
+prompts = sorted(store.get_prompts(), key=lambda p: p.created_at, reverse=True)
 if not prompts:
-    st.info("No prompts yet. Create one above!")
+    info("No prompts yet. Create one above to get started.")
 else:
     for prompt in prompts:
-        with st.expander(f"{ICON_CHAT} {prompt.name}"):
-            # Check if this prompt is being edited
-            is_editing = st.session_state.get(f"editing_prompt_{prompt.name}", False)
-            
-            if is_editing:
-                # Editable mode
-                edited_content = st.text_area(
-                    "Content",
-                    value=st.session_state.get(f"edit_content_{prompt.name}", prompt.content),
-                    height=TEXTAREA_PROMPT_VIEW_HEIGHT,
-                    key=f"edit_prompt_{prompt.name}",
-                    help="Edit the prompt content"
-                )
-                
-                # Check if prompt is in use by any projects
-                projects = store.get_projects()
-                projects_using_prompt = [p.name for p in projects if p.prompt_name == prompt.name]
-                
-                if projects_using_prompt:
-                    st.warning(
-                        f"{ICON_WARNING} This prompt is used by {len(projects_using_prompt)} project(s): "
-                        f"{', '.join(projects_using_prompt)}. Changes will affect future OCR operations."
-                    )
-                
-                col1, col2, col3 = st.columns([1, 1, 4])
-                with col1:
-                    if st.button(f"{ICON_SAVE} Save Changes", key=f"save_prompt_{prompt.name}", use_container_width=True):
-                        if edited_content:
-                            # Update prompt with new content and last_modified timestamp
-                            prompt.content = edited_content
-                            prompt.last_modified = datetime.now()
-                            store.save_prompt(prompt)
-                            st.session_state[f"editing_prompt_{prompt.name}"] = False
-                            if f"edit_content_{prompt.name}" in st.session_state:
-                                del st.session_state[f"edit_content_{prompt.name}"]
-                            st.success(f"Prompt '{prompt.name}' updated!")
-                            st.rerun()
-                        else:
-                            st.error("Prompt content cannot be empty")
-                
-                with col2:
-                    if st.button(f"{ICON_CANCEL} Cancel", key=f"cancel_edit_prompt_{prompt.name}", use_container_width=True):
-                        st.session_state[f"editing_prompt_{prompt.name}"] = False
-                        if f"edit_content_{prompt.name}" in st.session_state:
-                            del st.session_state[f"edit_content_{prompt.name}"]
-                        st.rerun()
-            else:
-                # View-only mode
-                st.text_area(
-                    "Content",
-                    value=prompt.content,
-                    height=TEXTAREA_PROMPT_VIEW_HEIGHT,
-                    key=f"view_prompt_{prompt.name}",
-                    disabled=True
-                )
-                
-                # Show timestamps
-                st.write(f"**Created:** {prompt.created_at.strftime('%Y-%m-%d %H:%M')}")
-                if prompt.last_modified:
-                    st.write(f"**Last Modified:** {prompt.last_modified.strftime('%Y-%m-%d %H:%M')}")
-                
-                # Action buttons
-                col1, col2, col3 = st.columns([1, 1, 4])
-                with col1:
-                    if st.button(f"{ICON_EDIT} Edit", key=f"edit_btn_prompt_{prompt.name}", use_container_width=True):
-                        st.session_state[f"editing_prompt_{prompt.name}"] = True
-                        st.session_state[f"edit_content_{prompt.name}"] = prompt.content
-                        st.rerun()
-                
-                with col2:
-                    if st.button(f"{ICON_DELETE} Delete", key=f"delete_prompt_{prompt.name}", use_container_width=True):
-                        st.session_state[f"confirm_delete_prompt_{prompt.name}"] = True
-                        st.rerun()
-            
-            # Confirmation dialog for deletion
-            if st.session_state.get(f"confirm_delete_prompt_{prompt.name}", False):
-                @st.dialog("Confirm Prompt Deletion")
-                def confirm_delete_prompt():
-                    def on_confirm():
-                        store.delete_prompt(prompt.name)
-                        st.session_state[f"confirm_delete_prompt_{prompt.name}"] = False
-                        st.success(f"Deleted prompt '{prompt.name}'")
-                        st.rerun()
-                    
-                    show_confirmation_dialog(
-                        title="Confirm Prompt Deletion",
-                        message=f"Are you sure you want to delete prompt **{prompt.name}**?",
-                        on_confirm=on_confirm,
-                        warning_text="Projects using this prompt will need to be updated."
-                    )
-                    
-                    # Handle cancel
-                    if st.session_state.get('_dialog_cancelled', False):
-                        st.session_state[f"confirm_delete_prompt_{prompt.name}"] = False
-                        st.rerun()
-                confirm_delete_prompt()
+        render_prompt_card(prompt)
