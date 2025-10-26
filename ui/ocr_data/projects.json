@@ -1,0 +1,23 @@
+[
+  {
+    "name": "Studentenverzeichnis LMU (1876) v2",
+    "prompt_name": " Studentenverzeichnis LMU (1876) v2",
+    "schema_name": "Studentenverzeichnis LMU (1876)",
+    "pdf_files": [
+      "ocr_data/uploads/Studentenverzeichnis LMU (1876) v2/lmu_students_1878sose.pdf",
+      "ocr_data/uploads/Studentenverzeichnis LMU (1876) v2/lmu_students_1876ws.pdf"
+    ],
+    "batch_jobs": [],
+    "created_at": "2025-10-12T17:11:34.208322"
+  },
+  {
+    "name": "Heiratsurkunden Feldmoching",
+    "prompt_name": "Heiratsurkunden Feldmoching",
+    "schema_name": "Heiratsurkunden Feldmoching",
+    "pdf_files": [
+      "ocr_data/uploads/Heiratsurkunden Feldmoching/DE-1992-STANM-00009-Heirat.pdf"
+    ],
+    "batch_jobs": [],
+    "created_at": "2025-10-22T01:37:46.199213"
+  }
+]

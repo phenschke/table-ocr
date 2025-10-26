@@ -1,0 +1,64 @@
+[
+  {
+    "name": "Studentenverzeichnis LMU (1876)",
+    "fields": [
+      {
+        "name": "Namen",
+        "field_type": "STRING",
+        "required": true
+      },
+      {
+        "name": "Heimath_Stadt",
+        "field_type": "STRING",
+        "required": true
+      },
+      {
+        "name": "Heimath_Land",
+        "field_type": "STRING",
+        "required": true
+      },
+      {
+        "name": "Wohnung",
+        "field_type": "STRING",
+        "required": true
+      },
+      {
+        "name": "Studium",
+        "field_type": "STRING",
+        "required": true
+      }
+    ],
+    "created_at": "2025-10-12T15:25:08.734488"
+  },
+  {
+    "name": "Heiratsurkunden Feldmoching",
+    "fields": [
+      {
+        "name": "Familienname",
+        "field_type": "STRING",
+        "required": true
+      },
+      {
+        "name": "Vornamen",
+        "field_type": "STRING",
+        "required": true
+      },
+      {
+        "name": "Name des anderen Ehegatten",
+        "field_type": "STRING",
+        "required": true
+      },
+      {
+        "name": "geb. am",
+        "field_type": "STRING",
+        "required": true
+      },
+      {
+        "name": "Fam. Buch Nr.",
+        "field_type": "STRING",
+        "required": true
+      }
+    ],
+    "created_at": "2025-10-22T01:35:54.380635"
+  }
+]

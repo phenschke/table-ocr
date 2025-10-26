@@ -1,0 +1,14 @@
+[
+  {
+    "name": "Studentenverzeichnis LMU (1876) v2",
+    "content": "The attached page contains a table of students at LMU Munich.\nThe table columns visible in the page are [\"Namen.\", \"Heimath\", \"Wohnung\", \"Studium\"].\n- \"Namen.\" contains \"Last Names, First Names\", e.g., \"Mustermann, Max Joseph\"\n- \"Heimath\" contains the city of origin and the state of origin, e.g., \"Kassel   Hessen\" or \"Athen  Griechenland\" or \"M\u00fcnchen  Bayern\". In the output JSON, separate these into \"Heimath_Stadt\" and \"Heimath_Land\", respectively. This field frequently contain a ditto (\") symbol. Extract this faithfully as the ditto symbol itself.\n- \"Wohnung\" which contains an address, e.g., \"Schellingstr. 5/2\", or a place, e.g., \"Maximilianeum\". Pay careful attention that the \"Heimath_Land\" is not extracted into the \"Wohnung\" field.\n- \"Studium\" which contains the subject of study, e.g., \"Medizin\". This can be abbreviated.\n\nExtract the data in table into the target JSON structure.\n",
+    "created_at": "2025-10-12T17:04:53.449049",
+    "last_modified": null
+  },
+  {
+    "name": "Heiratsurkunden Feldmoching",
+    "content": "The attached page contains a table of marriages certified.\nThe table columns are {\"Familienname\", \"Vornamen\", \"Name des anderen Ehegatten\", \"geb. am\", \"Fam. Buch Nr.\"].\n\nExtract the data into the target JSON structure. Don't hallucinate.\n",
+    "created_at": "2025-10-22T01:30:25.597890",
+    "last_modified": null
+  }
+]
